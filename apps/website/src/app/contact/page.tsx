@@ -143,7 +143,7 @@ export default function ContactPage() {
                 <h2 className="text-xl font-semibold mb-6">Community</h2>
                 <div className="space-y-4">
                   <a
-                    href="https://github.com/yourusername/agent-otp"
+                    href="https://github.com/orrisai/agent-otp"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-3 text-muted-foreground hover:text-foreground transition-colors"
