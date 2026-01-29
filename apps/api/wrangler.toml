@@ -1,0 +1,24 @@
+name = "agent-otp-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Development settings
+[dev]
+port = 8787
+local_protocol = "http"
+
+# Environment variables (set via wrangler secret or dashboard for production)
+[vars]
+API_BASE_URL = "http://localhost:8787"
+DASHBOARD_URL = "http://localhost:3000"
+
+# Production environment
+[env.production]
+vars = { API_BASE_URL = "https://api.agentotp.com", DASHBOARD_URL = "https://app.agentotp.com" }
+
+# Bindings would be added for KV, D1, or other Cloudflare services if needed
+# [kv_namespaces]
+# [[kv_namespaces]]
+# binding = "RATE_LIMIT_KV"
+# id = "xxx"

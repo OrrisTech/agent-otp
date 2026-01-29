@@ -1,0 +1,9 @@
+[install]
+# Use exact versions for reproducible builds
+exact = true
+
+[install.lockfile]
+# Save the lockfile when installing
+save = true
+
+# Bun configuration file

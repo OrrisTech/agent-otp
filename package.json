@@ -1,0 +1,33 @@
+{
+  "name": "agent-otp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lightweight OTP (One-Time Permission) service for AI Agents",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run --filter '*' dev",
+    "dev:api": "bun run --filter @orrisai/agent-otp-api dev",
+    "dev:website": "bun run --filter @orrisai/agent-otp-website dev",
+    "build": "bun run --filter '*' build",
+    "test": "bun run --filter '*' test",
+    "lint": "bun run --filter '*' lint",
+    "typecheck": "bun run --filter '*' typecheck",
+    "db:migrate": "bun run --filter @orrisai/agent-otp-api db:migrate",
+    "db:generate": "bun run --filter @orrisai/agent-otp-api db:generate",
+    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "3.3.3",
+    "@types/bun": "^1.1.14",
+    "@types/react": "19.2.10",
+    "@types/react-dom": "19.2.3",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "bun@1.1.42"
+}

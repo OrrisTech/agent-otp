@@ -1,0 +1,34 @@
+{
+  "name": "@orrisai/agent-otp-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "wrangler deploy --dry-run --outdir=dist",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "db:migrate": "supabase db push",
+    "db:generate": "supabase gen types typescript --local > src/lib/database.types.ts"
+  },
+  "dependencies": {
+    "@orrisai/agent-otp-shared": "workspace:*",
+    "@hono/zod-validator": "^0.4.2",
+    "@supabase/supabase-js": "^2.47.14",
+    "@upstash/redis": "^1.34.4",
+    "argon2": "^0.41.1",
+    "hono": "^4.7.4",
+    "jose": "^5.9.6",
+    "nanoid": "^5.0.9",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250121.0",
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8",
+    "wrangler": "^3.101.0"
+  }
+}
