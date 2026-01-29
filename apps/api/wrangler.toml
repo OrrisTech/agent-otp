@@ -3,6 +3,11 @@ main = "src/index.ts"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Custom domain routes (requires domain to be in Cloudflare)
+routes = [
+  { pattern = "api.agentotp.com", custom_domain = true }
+]
+
 # Development settings
 [dev]
 port = 8787

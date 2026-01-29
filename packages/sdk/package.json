@@ -25,12 +25,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/agent-otp/agent-otp.git",
+    "url": "https://github.com/orrisai/agent-otp.git",
     "directory": "packages/sdk"
   },
   "homepage": "https://agentotp.com/docs/sdk/typescript",
   "bugs": {
-    "url": "https://github.com/agent-otp/agent-otp/issues"
+    "url": "https://github.com/orrisai/agent-otp/issues"
   },
   "keywords": [
     "agent",
