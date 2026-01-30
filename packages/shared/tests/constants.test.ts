@@ -1,59 +1,65 @@
 /**
  * Tests for shared constants.
+ *
+ * Agent OTP Relay - Secure OTP relay for AI agents.
  */
 
 import { describe, it, expect } from 'vitest';
 import {
-  PERMISSION_STATUS,
-  POLICY_ACTION,
-  TOKEN_DEFAULTS,
+  OTP_REQUEST_STATUS,
+  OTP_SOURCE,
+  OTP_DEFAULTS,
   PAGINATION_DEFAULTS,
   AUDIT_EVENT_TYPE,
   HTTP_STATUS,
+  DEVICE_TYPE,
+  EMAIL_INTEGRATION_TYPE,
+  RATE_LIMIT_DEFAULTS,
 } from '../src/constants';
 
 describe('Constants', () => {
-  describe('PERMISSION_STATUS', () => {
+  describe('OTP_REQUEST_STATUS', () => {
     it('should have all required statuses', () => {
-      expect(PERMISSION_STATUS.PENDING).toBe('pending');
-      expect(PERMISSION_STATUS.APPROVED).toBe('approved');
-      expect(PERMISSION_STATUS.DENIED).toBe('denied');
-      expect(PERMISSION_STATUS.EXPIRED).toBe('expired');
-      expect(PERMISSION_STATUS.USED).toBe('used');
+      expect(OTP_REQUEST_STATUS.PENDING_APPROVAL).toBe('pending_approval');
+      expect(OTP_REQUEST_STATUS.APPROVED).toBe('approved');
+      expect(OTP_REQUEST_STATUS.OTP_RECEIVED).toBe('otp_received');
+      expect(OTP_REQUEST_STATUS.CONSUMED).toBe('consumed');
+      expect(OTP_REQUEST_STATUS.DENIED).toBe('denied');
+      expect(OTP_REQUEST_STATUS.EXPIRED).toBe('expired');
+      expect(OTP_REQUEST_STATUS.CANCELLED).toBe('cancelled');
     });
 
-    it('should be readonly', () => {
-      // TypeScript should prevent direct assignment, but we can verify values exist
-      expect(Object.keys(PERMISSION_STATUS)).toHaveLength(5);
-    });
-  });
-
-  describe('POLICY_ACTION', () => {
-    it('should have all required actions', () => {
-      expect(POLICY_ACTION.AUTO_APPROVE).toBe('auto_approve');
-      expect(POLICY_ACTION.REQUIRE_APPROVAL).toBe('require_approval');
-      expect(POLICY_ACTION.DENY).toBe('deny');
-    });
-
-    it('should have exactly 3 actions', () => {
-      expect(Object.keys(POLICY_ACTION)).toHaveLength(3);
+    it('should have exactly 7 statuses', () => {
+      expect(Object.keys(OTP_REQUEST_STATUS)).toHaveLength(7);
     });
   });
 
-  describe('TOKEN_DEFAULTS', () => {
+  describe('OTP_SOURCE', () => {
+    it('should have all required sources', () => {
+      expect(OTP_SOURCE.SMS).toBe('sms');
+      expect(OTP_SOURCE.EMAIL).toBe('email');
+      expect(OTP_SOURCE.WHATSAPP).toBe('whatsapp');
+    });
+
+    it('should have exactly 3 sources', () => {
+      expect(Object.keys(OTP_SOURCE)).toHaveLength(3);
+    });
+  });
+
+  describe('OTP_DEFAULTS', () => {
     it('should have sensible default values', () => {
-      expect(TOKEN_DEFAULTS.DEFAULT_TTL_SECONDS).toBe(300); // 5 minutes
-      expect(TOKEN_DEFAULTS.MIN_TTL_SECONDS).toBe(30); // 30 seconds
-      expect(TOKEN_DEFAULTS.MAX_TTL_SECONDS).toBe(3600); // 1 hour
-      expect(TOKEN_DEFAULTS.DEFAULT_USES).toBe(1); // One-time use by default
+      expect(OTP_DEFAULTS.DEFAULT_TTL_SECONDS).toBe(300); // 5 minutes
+      expect(OTP_DEFAULTS.MIN_TTL_SECONDS).toBe(60); // 1 minute
+      expect(OTP_DEFAULTS.MAX_TTL_SECONDS).toBe(600); // 10 minutes
+      expect(OTP_DEFAULTS.APPROVAL_TIMEOUT_SECONDS).toBe(120); // 2 minutes
     });
 
     it('should have valid TTL range', () => {
-      expect(TOKEN_DEFAULTS.MIN_TTL_SECONDS).toBeLessThan(
-        TOKEN_DEFAULTS.DEFAULT_TTL_SECONDS
+      expect(OTP_DEFAULTS.MIN_TTL_SECONDS).toBeLessThan(
+        OTP_DEFAULTS.DEFAULT_TTL_SECONDS
       );
-      expect(TOKEN_DEFAULTS.DEFAULT_TTL_SECONDS).toBeLessThan(
-        TOKEN_DEFAULTS.MAX_TTL_SECONDS
+      expect(OTP_DEFAULTS.DEFAULT_TTL_SECONDS).toBeLessThan(
+        OTP_DEFAULTS.MAX_TTL_SECONDS
       );
     });
   });
@@ -73,13 +79,14 @@ describe('Constants', () => {
   });
 
   describe('AUDIT_EVENT_TYPE', () => {
-    it('should have all permission-related events', () => {
-      expect(AUDIT_EVENT_TYPE.REQUEST).toBe('request');
-      expect(AUDIT_EVENT_TYPE.APPROVE).toBe('approve');
-      expect(AUDIT_EVENT_TYPE.DENY).toBe('deny');
-      expect(AUDIT_EVENT_TYPE.USE).toBe('use');
-      expect(AUDIT_EVENT_TYPE.REVOKE).toBe('revoke');
-      expect(AUDIT_EVENT_TYPE.EXPIRE).toBe('expire');
+    it('should have all OTP-related events', () => {
+      expect(AUDIT_EVENT_TYPE.OTP_REQUEST).toBe('otp_request');
+      expect(AUDIT_EVENT_TYPE.OTP_APPROVE).toBe('otp_approve');
+      expect(AUDIT_EVENT_TYPE.OTP_DENY).toBe('otp_deny');
+      expect(AUDIT_EVENT_TYPE.OTP_RECEIVE).toBe('otp_receive');
+      expect(AUDIT_EVENT_TYPE.OTP_CONSUME).toBe('otp_consume');
+      expect(AUDIT_EVENT_TYPE.OTP_EXPIRE).toBe('otp_expire');
+      expect(AUDIT_EVENT_TYPE.OTP_CANCEL).toBe('otp_cancel');
     });
 
     it('should have all agent-related events', () => {
@@ -88,10 +95,34 @@ describe('Constants', () => {
       expect(AUDIT_EVENT_TYPE.AGENT_DELETE).toBe('agent_delete');
     });
 
-    it('should have all policy-related events', () => {
-      expect(AUDIT_EVENT_TYPE.POLICY_CREATE).toBe('policy_create');
-      expect(AUDIT_EVENT_TYPE.POLICY_UPDATE).toBe('policy_update');
-      expect(AUDIT_EVENT_TYPE.POLICY_DELETE).toBe('policy_delete');
+    it('should have all device and email events', () => {
+      expect(AUDIT_EVENT_TYPE.DEVICE_REGISTER).toBe('device_register');
+      expect(AUDIT_EVENT_TYPE.DEVICE_REMOVE).toBe('device_remove');
+      expect(AUDIT_EVENT_TYPE.EMAIL_CONNECT).toBe('email_connect');
+      expect(AUDIT_EVENT_TYPE.EMAIL_DISCONNECT).toBe('email_disconnect');
+    });
+  });
+
+  describe('DEVICE_TYPE', () => {
+    it('should have all device types', () => {
+      expect(DEVICE_TYPE.ANDROID).toBe('android');
+      expect(DEVICE_TYPE.IOS).toBe('ios');
+    });
+  });
+
+  describe('EMAIL_INTEGRATION_TYPE', () => {
+    it('should have all integration types', () => {
+      expect(EMAIL_INTEGRATION_TYPE.GMAIL_API).toBe('gmail_api');
+      expect(EMAIL_INTEGRATION_TYPE.IMAP).toBe('imap');
+      expect(EMAIL_INTEGRATION_TYPE.OUTLOOK).toBe('outlook');
+    });
+  });
+
+  describe('RATE_LIMIT_DEFAULTS', () => {
+    it('should have sensible rate limits', () => {
+      expect(RATE_LIMIT_DEFAULTS.OTP_REQUESTS_PER_MINUTE).toBe(10);
+      expect(RATE_LIMIT_DEFAULTS.OTP_APPROVALS_PER_MINUTE).toBe(30);
+      expect(RATE_LIMIT_DEFAULTS.OTP_CAPTURES_PER_DAY).toBe(100);
     });
   });
 

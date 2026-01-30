@@ -1,74 +1,82 @@
 /**
- * Agent OTP SDK
+ * Agent OTP Relay SDK
  *
- * TypeScript SDK for AI agents to request and manage one-time permissions
- * for sensitive operations.
+ * A secure OTP relay service that helps AI agents receive verification codes
+ * (SMS/email) with user approval and end-to-end encryption.
  *
  * @example
  * ```typescript
- * import { AgentOTPClient } from '@orrisai/agent-otp-sdk';
+ * import {
+ *   AgentOTPClient,
+ *   generateKeyPair,
+ *   exportPublicKey
+ * } from '@orrisai/agent-otp-sdk';
  *
  * const client = new AgentOTPClient({
- *   apiKey: 'ak_your_api_key_here',
+ *   apiKey: process.env.AGENT_OTP_API_KEY!,
  * });
  *
- * // Request permission for an action
- * const permission = await client.requestPermission({
- *   action: 'gmail.send',
- *   resource: 'email:recipient@example.com',
- *   scope: { max_emails: 1 },
- *   context: { reason: 'Sending invoice' },
- *   waitForApproval: true,
+ * // Generate encryption keys (do this once, store private key securely)
+ * const { publicKey, privateKey } = await generateKeyPair();
+ *
+ * // Request an OTP
+ * const request = await client.requestOTP({
+ *   reason: 'Sign up for Acme service',
+ *   expectedSender: 'Acme',
+ *   publicKey: await exportPublicKey(publicKey),
+ *   waitForOTP: true,
  * });
  *
- * if (permission.status === 'approved') {
- *   // Use the token for your operation
- *   const result = await sendEmail({
- *     to: 'recipient@example.com',
- *     otpToken: permission.token,
- *   });
- *
- *   // Mark token as used
- *   await client.useToken(permission.id, permission.token);
+ * // Consume the OTP (decrypts and deletes from server)
+ * if (request.status === 'otp_received') {
+ *   const { code } = await client.consumeOTP(request.id, privateKey);
+ *   console.log('OTP code:', code);
  * }
  * ```
  *
  * @packageDocumentation
  */
 
+// Main client
 export { AgentOTPClient } from './client';
 
+// Types
 export type {
   AgentOTPClientConfig,
-  RequestPermissionOptions,
-  PermissionResult,
-  PendingApprovalInfo,
-  UseTokenInput,
-  PermissionStatus,
-  TokenVerificationResult,
-  TokenUsageResult,
+  RequestOTPOptions,
+  OTPRequestResult,
+  OTPConsumeResult,
+  OTPPendingInfo,
+  OTPSourceFilter,
+  OTPRequestStatus,
+  OTPSource,
+  OTPMetadata,
 } from './types';
 
+// Error classes
 export {
   AgentOTPError,
   AuthenticationError,
-  ForbiddenError,
-  NotFoundError,
   ValidationError,
   RateLimitError,
   TimeoutError,
-  PermissionDeniedError,
-  PermissionExpiredError,
-  InvalidTokenError,
   NetworkError,
   ServerError,
-  TokenUsedError,
-  TokenRevokedError,
+  OTPNotFoundError,
+  OTPExpiredError,
+  OTPAlreadyConsumedError,
+  OTPApprovalDeniedError,
+  OTPCancelledError,
+  DecryptionError,
 } from './errors';
 
-// Re-export useful constants
+// Crypto utilities for E2E encryption
 export {
-  PERMISSION_STATUS,
-  POLICY_ACTION,
-  TOKEN_DEFAULTS,
-} from '@orrisai/agent-otp-shared';
+  generateKeyPair,
+  exportPublicKey,
+  importPublicKey,
+  exportPrivateKey,
+  importPrivateKey,
+  decryptOTPPayload,
+  encryptWithPublicKey,
+} from './crypto';

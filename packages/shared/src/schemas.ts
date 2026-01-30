@@ -1,14 +1,18 @@
 /**
  * Zod schemas for request/response validation.
+ *
+ * Agent OTP Relay - Secure OTP relay for AI agents.
  */
 
 import { z } from 'zod';
 import {
-  PERMISSION_STATUS,
-  POLICY_ACTION,
-  TOKEN_DEFAULTS,
+  OTP_REQUEST_STATUS,
+  OTP_SOURCE,
+  OTP_DEFAULTS,
   PAGINATION_DEFAULTS,
   AUDIT_EVENT_TYPE,
+  DEVICE_TYPE,
+  EMAIL_INTEGRATION_TYPE,
 } from './constants';
 
 // ============================================================================
@@ -67,87 +71,84 @@ export const updateAgentSchema = z.object({
 });
 
 // ============================================================================
-// Policy Schemas
+// OTP Source and Filter Schemas
 // ============================================================================
 
-export const policyConditionSchema = z.object({
-  equals: z.union([z.string(), z.number(), z.boolean()]).optional(),
-  notEquals: z.union([z.string(), z.number(), z.boolean()]).optional(),
-  lessThan: z.number().optional(),
-  greaterThan: z.number().optional(),
-  lessThanOrEqual: z.number().optional(),
-  greaterThanOrEqual: z.number().optional(),
-  startsWith: z.string().optional(),
-  endsWith: z.string().optional(),
-  contains: z.string().optional(),
-  matches: z.string().optional(), // Regex pattern
-  in: z.array(z.union([z.string(), z.number()])).optional(),
-  notIn: z.array(z.union([z.string(), z.number()])).optional(),
-  exists: z.boolean().optional(),
-});
-
-export const policyActionSchema = z.enum([
-  POLICY_ACTION.AUTO_APPROVE,
-  POLICY_ACTION.REQUIRE_APPROVAL,
-  POLICY_ACTION.DENY,
+export const otpSourceSchema = z.enum([
+  OTP_SOURCE.SMS,
+  OTP_SOURCE.EMAIL,
+  OTP_SOURCE.WHATSAPP,
 ]);
 
-export const createPolicySchema = z.object({
-  agentId: uuidSchema.optional(),
-  name: z.string().min(1).max(255),
-  description: z.string().max(1000).optional(),
-  priority: z.number().int().default(0),
-  conditions: z.record(policyConditionSchema),
-  action: policyActionSchema,
-  scopeTemplate: z.record(z.unknown()).optional(),
-});
-
-export const updatePolicySchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  description: z.string().max(1000).optional(),
-  priority: z.number().int().optional(),
-  conditions: z.record(policyConditionSchema).optional(),
-  action: policyActionSchema.optional(),
-  scopeTemplate: z.record(z.unknown()).nullable().optional(),
-  isActive: z.boolean().optional(),
+export const otpSourceFilterSchema = z.object({
+  sources: z.array(otpSourceSchema).optional(),
+  senderPattern: z.string().max(255).optional(),
+  contentPattern: z.string().max(500).optional(),
+  receivedAfter: isoDateStringSchema.optional(),
 });
 
 // ============================================================================
-// Permission Request Schemas
+// OTP Request Schemas
 // ============================================================================
 
-export const permissionStatusSchema = z.enum([
-  PERMISSION_STATUS.PENDING,
-  PERMISSION_STATUS.APPROVED,
-  PERMISSION_STATUS.DENIED,
-  PERMISSION_STATUS.EXPIRED,
-  PERMISSION_STATUS.USED,
+export const otpRequestStatusSchema = z.enum([
+  OTP_REQUEST_STATUS.PENDING_APPROVAL,
+  OTP_REQUEST_STATUS.APPROVED,
+  OTP_REQUEST_STATUS.OTP_RECEIVED,
+  OTP_REQUEST_STATUS.CONSUMED,
+  OTP_REQUEST_STATUS.DENIED,
+  OTP_REQUEST_STATUS.EXPIRED,
+  OTP_REQUEST_STATUS.CANCELLED,
 ]);
 
-export const createPermissionRequestSchema = z.object({
-  action: z.string().min(1).max(255),
-  resource: z.string().max(255).optional(),
-  scope: z.record(z.unknown()).default({}),
-  context: z.record(z.unknown()).default({}),
+export const createOTPRequestSchema = z.object({
+  reason: z.string().min(1).max(500),
+  expectedSender: z.string().max(255).optional(),
+  filter: otpSourceFilterSchema.default({}),
+  publicKey: z.string().min(1), // Base64 encoded public key
   ttl: z
     .number()
     .int()
-    .min(TOKEN_DEFAULTS.MIN_TTL_SECONDS)
-    .max(TOKEN_DEFAULTS.MAX_TTL_SECONDS)
-    .default(TOKEN_DEFAULTS.DEFAULT_TTL_SECONDS),
+    .min(OTP_DEFAULTS.MIN_TTL_SECONDS)
+    .max(OTP_DEFAULTS.MAX_TTL_SECONDS)
+    .default(OTP_DEFAULTS.DEFAULT_TTL_SECONDS),
 });
 
 // ============================================================================
-// Token Schemas
+// Device Schemas
 // ============================================================================
 
-export const verifyTokenSchema = z.object({
-  token: z.string().min(1),
+export const deviceTypeSchema = z.enum([DEVICE_TYPE.ANDROID, DEVICE_TYPE.IOS]);
+
+export const registerDeviceSchema = z.object({
+  deviceType: deviceTypeSchema,
+  deviceName: z.string().max(255).optional(),
+  pushToken: z.string().max(500).optional(),
 });
 
-export const useTokenSchema = z.object({
-  token: z.string().min(1),
-  actionDetails: z.record(z.unknown()).optional(),
+// ============================================================================
+// Email Integration Schemas
+// ============================================================================
+
+export const emailIntegrationTypeSchema = z.enum([
+  EMAIL_INTEGRATION_TYPE.GMAIL_API,
+  EMAIL_INTEGRATION_TYPE.IMAP,
+  EMAIL_INTEGRATION_TYPE.OUTLOOK,
+]);
+
+export const createEmailIntegrationSchema = z.object({
+  integrationType: emailIntegrationTypeSchema,
+  emailAddress: z.string().email(),
+  credentials: z.record(z.string()),
+});
+
+// ============================================================================
+// OTP Consumption Schemas
+// ============================================================================
+
+export const consumeOTPSchema = z.object({
+  // Private key is handled client-side for decryption
+  // This schema is for the API request
 });
 
 // ============================================================================
@@ -155,24 +156,26 @@ export const useTokenSchema = z.object({
 // ============================================================================
 
 export const auditEventTypeSchema = z.enum([
-  AUDIT_EVENT_TYPE.REQUEST,
-  AUDIT_EVENT_TYPE.APPROVE,
-  AUDIT_EVENT_TYPE.DENY,
-  AUDIT_EVENT_TYPE.USE,
-  AUDIT_EVENT_TYPE.REVOKE,
-  AUDIT_EVENT_TYPE.EXPIRE,
+  AUDIT_EVENT_TYPE.OTP_REQUEST,
+  AUDIT_EVENT_TYPE.OTP_APPROVE,
+  AUDIT_EVENT_TYPE.OTP_DENY,
+  AUDIT_EVENT_TYPE.OTP_RECEIVE,
+  AUDIT_EVENT_TYPE.OTP_CONSUME,
+  AUDIT_EVENT_TYPE.OTP_EXPIRE,
+  AUDIT_EVENT_TYPE.OTP_CANCEL,
   AUDIT_EVENT_TYPE.AGENT_CREATE,
   AUDIT_EVENT_TYPE.AGENT_UPDATE,
   AUDIT_EVENT_TYPE.AGENT_DELETE,
-  AUDIT_EVENT_TYPE.POLICY_CREATE,
-  AUDIT_EVENT_TYPE.POLICY_UPDATE,
-  AUDIT_EVENT_TYPE.POLICY_DELETE,
+  AUDIT_EVENT_TYPE.DEVICE_REGISTER,
+  AUDIT_EVENT_TYPE.DEVICE_REMOVE,
+  AUDIT_EVENT_TYPE.EMAIL_CONNECT,
+  AUDIT_EVENT_TYPE.EMAIL_DISCONNECT,
 ]);
 
 export const auditLogFilterSchema = z.object({
   userId: uuidSchema.optional(),
   agentId: uuidSchema.optional(),
-  permissionRequestId: uuidSchema.optional(),
+  otpRequestId: uuidSchema.optional(),
   eventType: auditEventTypeSchema.optional(),
   startDate: isoDateStringSchema.optional(),
   endDate: isoDateStringSchema.optional(),
@@ -182,10 +185,9 @@ export const auditLogFilterSchema = z.object({
 // Approval Schemas
 // ============================================================================
 
-export const approvalDecisionSchema = z.object({
+export const otpApprovalDecisionSchema = z.object({
   approved: z.boolean(),
   reason: z.string().max(500).optional(),
-  scopeModifications: z.record(z.unknown()).optional(),
 });
 
 // ============================================================================
@@ -196,17 +198,17 @@ export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type CreateAgentInput = z.infer<typeof createAgentSchema>;
 export type UpdateAgentInput = z.infer<typeof updateAgentSchema>;
-export type PolicyCondition = z.infer<typeof policyConditionSchema>;
-export type PolicyAction = z.infer<typeof policyActionSchema>;
-export type CreatePolicyInput = z.infer<typeof createPolicySchema>;
-export type UpdatePolicyInput = z.infer<typeof updatePolicySchema>;
-export type PermissionStatus = z.infer<typeof permissionStatusSchema>;
-export type CreatePermissionRequestInput = z.infer<
-  typeof createPermissionRequestSchema
+export type OTPSource = z.infer<typeof otpSourceSchema>;
+export type OTPSourceFilter = z.infer<typeof otpSourceFilterSchema>;
+export type OTPRequestStatus = z.infer<typeof otpRequestStatusSchema>;
+export type CreateOTPRequestInput = z.infer<typeof createOTPRequestSchema>;
+export type DeviceType = z.infer<typeof deviceTypeSchema>;
+export type RegisterDeviceInput = z.infer<typeof registerDeviceSchema>;
+export type EmailIntegrationType = z.infer<typeof emailIntegrationTypeSchema>;
+export type CreateEmailIntegrationInput = z.infer<
+  typeof createEmailIntegrationSchema
 >;
-export type VerifyTokenInput = z.infer<typeof verifyTokenSchema>;
-export type UseTokenInput = z.infer<typeof useTokenSchema>;
 export type AuditEventType = z.infer<typeof auditEventTypeSchema>;
 export type AuditLogFilter = z.infer<typeof auditLogFilterSchema>;
-export type ApprovalDecision = z.infer<typeof approvalDecisionSchema>;
+export type OTPApprovalDecision = z.infer<typeof otpApprovalDecisionSchema>;
 export type PaginationInput = z.infer<typeof paginationSchema>;

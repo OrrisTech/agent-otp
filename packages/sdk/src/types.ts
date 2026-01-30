@@ -1,11 +1,15 @@
 /**
- * Type definitions for the Agent OTP SDK.
+ * Type definitions for the Agent OTP Relay SDK.
+ *
+ * Agent OTP is a secure OTP relay service that helps AI agents
+ * receive verification codes (SMS/email) with user approval
+ * and end-to-end encryption.
  */
 
 import type {
-  PermissionStatus,
-  TokenVerificationResult,
-  TokenUsageResult,
+  OTPRequestStatus,
+  OTPSource,
+  OTPMetadata,
 } from '@orrisai/agent-otp-shared';
 
 /**
@@ -49,74 +53,104 @@ export interface AgentOTPClientConfig {
 }
 
 /**
- * Input for requesting a permission.
+ * Filter criteria for matching incoming OTPs.
  */
-export interface RequestPermissionInput {
+export interface OTPSourceFilter {
   /**
-   * The action being requested (e.g., 'gmail.send', 'bank.transfer').
+   * Only accept OTPs from these sources.
    */
-  action: string;
+  sources?: OTPSource[];
 
   /**
-   * The specific resource being accessed (e.g., 'email:user@example.com').
+   * Sender pattern matching (e.g., "Google", "+1555*", "*@acme.com").
+   * Supports wildcards (*).
    */
-  resource?: string;
+  senderPattern?: string;
 
   /**
-   * Scope restrictions for this permission.
+   * Content/subject pattern matching (regex).
    */
-  scope?: Record<string, unknown>;
+  contentPattern?: string;
 
   /**
-   * Additional context about the request.
+   * Only accept OTPs received after this timestamp.
    */
-  context?: Record<string, unknown>;
-
-  /**
-   * Time-to-live in seconds for the permission.
-   * @default 300 (5 minutes)
-   */
-  ttl?: number;
+  receivedAfter?: Date;
 }
 
 /**
- * Options for requesting a permission.
+ * Options for requesting an OTP.
  */
-export interface RequestPermissionOptions extends RequestPermissionInput {
+export interface RequestOTPOptions {
   /**
-   * Whether to wait for human approval if required.
-   * If true, the call will block until approved, denied, or timed out.
-   * @default false
+   * Human-readable reason why the agent needs the OTP.
+   * This is shown to the user when they approve the request.
    */
-  waitForApproval?: boolean;
+  reason: string;
 
   /**
-   * Maximum time to wait for approval in milliseconds.
-   * Only used when waitForApproval is true.
-   * @default 60000 (60 seconds)
+   * Expected sender/service (e.g., "Google", "GitHub").
+   * Helps the user identify the relevant OTP.
+   */
+  expectedSender?: string;
+
+  /**
+   * Filter criteria for OTP matching.
+   */
+  filter?: OTPSourceFilter;
+
+  /**
+   * Agent's public key for E2E encryption (base64 encoded).
+   * The OTP will be encrypted with this key and only the agent
+   * with the corresponding private key can decrypt it.
+   */
+  publicKey: string;
+
+  /**
+   * Time-to-live for the request in seconds.
+   * @default 300 (5 minutes)
+   */
+  ttl?: number;
+
+  /**
+   * Whether to wait for OTP to arrive before returning.
+   * If true, the call will block until OTP is received or timeout.
+   * @default false
+   */
+  waitForOTP?: boolean;
+
+  /**
+   * Maximum time to wait for OTP in milliseconds.
+   * Only used when waitForOTP is true.
+   * @default 120000 (2 minutes)
    */
   timeout?: number;
 
   /**
-   * Callback when the request is pending human approval.
+   * Callback when the request is pending user approval.
    */
-  onPendingApproval?: (info: PendingApprovalInfo) => void;
+  onPendingApproval?: (info: OTPPendingInfo) => void;
 
   /**
-   * Polling interval in milliseconds when waiting for approval.
+   * Callback when OTP is received (before consumption).
+   */
+  onOTPReceived?: (metadata: OTPMetadata) => void;
+
+  /**
+   * Polling interval in milliseconds when waiting for OTP.
    * @default 2000 (2 seconds)
    */
   pollingInterval?: number;
 }
 
 /**
- * Information about a pending approval request.
+ * Information about a pending OTP approval request.
  */
-export interface PendingApprovalInfo {
+export interface OTPPendingInfo {
   /**
-   * Permission request ID.
+   * OTP request ID.
    */
-  permissionId: string;
+  otpRequestId: string;
 
   /**
    * URL for the user to approve/deny the request.
@@ -135,45 +169,45 @@ export interface PendingApprovalInfo {
 }
 
 /**
- * Result of a permission request.
+ * Result of an OTP request.
  */
-export interface PermissionResult {
+export interface OTPRequestResult {
   /**
-   * Permission request ID.
+   * OTP request ID.
    */
   id: string;
 
   /**
-   * Current status of the permission.
+   * Current status of the OTP request.
    */
-  status: PermissionStatus;
+  status: OTPRequestStatus;
 
   /**
-   * OTP token for the approved permission.
-   * Only present when status is 'approved'.
+   * Encrypted OTP payload (only when status is 'otp_received').
+   * Decrypt using the agent's private key.
    */
-  token?: string;
+  encryptedPayload?: string;
 
   /**
-   * Granted scope for the permission.
-   * May be more restrictive than requested.
-   */
-  scope?: Record<string, unknown>;
-
-  /**
-   * URL for human approval.
-   * Only present when status is 'pending'.
+   * URL for user approval.
+   * Only present when status is 'pending_approval'.
    */
   approvalUrl?: string;
 
   /**
    * WebSocket URL for real-time updates.
-   * Only present when status is 'pending'.
+   * Only present when status is 'pending_approval' or 'approved'.
    */
   webhookUrl?: string;
 
   /**
-   * When the permission expires.
+   * OTP metadata (sender, source, etc.).
+   * Only present when status is 'otp_received'.
+   */
+  metadata?: OTPMetadata;
+
+  /**
+   * When the request expires.
    */
   expiresAt: string;
 
@@ -184,16 +218,26 @@ export interface PermissionResult {
 }
 
 /**
- * Input for using a token.
+ * Result of consuming an OTP.
  */
-export interface UseTokenInput {
+export interface OTPConsumeResult {
   /**
-   * Details about the action being performed.
+   * The actual OTP code.
    */
-  actionDetails?: Record<string, unknown>;
+  code: string;
+
+  /**
+   * Full message content (if user allowed).
+   */
+  fullMessage?: string;
+
+  /**
+   * Metadata about the OTP.
+   */
+  metadata: OTPMetadata;
 }
 
 /**
  * Re-export types from shared package.
  */
-export type { PermissionStatus, TokenVerificationResult, TokenUsageResult };
+export type { OTPRequestStatus, OTPSource, OTPMetadata };

@@ -19,10 +19,16 @@ const docsNavigation = [
   {
     title: 'Core Concepts',
     links: [
-      { title: 'Permissions', href: '/docs/concepts/permissions' },
-      { title: 'Tokens', href: '/docs/concepts/tokens' },
-      { title: 'Policies', href: '/docs/concepts/policies' },
-      { title: 'Scopes', href: '/docs/concepts/scopes' },
+      { title: 'How It Works', href: '/docs/concepts/how-it-works' },
+      { title: 'Encryption', href: '/docs/concepts/encryption' },
+      { title: 'OTP Sources', href: '/docs/concepts/sources' },
+    ],
+  },
+  {
+    title: 'Setup Guides',
+    links: [
+      { title: 'Android SMS', href: '/docs/setup/android' },
+      { title: 'Email Integration', href: '/docs/setup/email' },
     ],
   },
   {
@@ -31,16 +37,6 @@ const docsNavigation = [
       { title: 'TypeScript SDK', href: '/docs/sdk/typescript' },
       { title: 'Python SDK', href: '/docs/sdk/python' },
       { title: 'Error Handling', href: '/docs/sdk/errors' },
-    ],
-  },
-  {
-    title: 'API Reference',
-    links: [
-      { title: 'Authentication', href: '/docs/api/authentication' },
-      { title: 'Permissions API', href: '/docs/api/permissions' },
-      { title: 'Policies API', href: '/docs/api/policies' },
-      { title: 'Agents API', href: '/docs/api/agents' },
-      { title: 'Audit API', href: '/docs/api/audit' },
     ],
   },
   {
@@ -55,8 +51,6 @@ const docsNavigation = [
   {
     title: 'Guides',
     links: [
-      { title: 'Policy Best Practices', href: '/docs/guides/policies' },
-      { title: 'Telegram Bot Setup', href: '/docs/guides/telegram' },
       { title: 'Self-Hosting', href: '/docs/guides/self-hosting' },
       { title: 'Security', href: '/docs/guides/security' },
     ],

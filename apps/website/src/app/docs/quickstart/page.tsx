@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Quick Start',
-  description: 'Get up and running with Agent OTP in 5 minutes. Learn how to install the SDK, configure your first agent, and request permissions.',
+  description: 'Get up and running with Agent OTP in minutes. Learn how to install the SDK, set up OTP capture, and request verification codes.',
 };
 
 export default function QuickStartPage() {
@@ -12,63 +12,19 @@ export default function QuickStartPage() {
       <h1>Quick Start</h1>
 
       <p className="lead text-xl text-muted-foreground">
-        Get up and running with Agent OTP in under 5 minutes. This guide will walk
-        you through installation, configuration, and your first permission request.
+        Get up and running with Agent OTP in minutes. This guide will walk you
+        through installation, setup, and requesting your first OTP.
       </p>
 
       <h2>Prerequisites</h2>
 
       <ul>
         <li>Node.js 18+ or Bun 1.0+</li>
-        <li>Docker and Docker Compose (for self-hosting)</li>
-        <li>An existing AI agent or application</li>
+        <li>An Agent OTP API key (self-hosted or from agentotp.com)</li>
+        <li>An AI agent or application that needs OTP verification</li>
       </ul>
 
-      <h2>Step 1: Start Agent OTP Server</h2>
-
-      <p>
-        Clone the repository and start the server locally using Docker:
-      </p>
-
-      <pre className="language-bash">
-        <code>{`# Clone the repository
-git clone https://github.com/orristech/agent-otp.git
-cd agent-otp
-
-# Copy environment template
-cp .env.example .env
-
-# Start all services
-docker compose up -d`}</code>
-      </pre>
-
-      <p>
-        The API will be available at <code>http://localhost:3000</code>.
-      </p>
-
-      <h2>Step 2: Create an agent and API key</h2>
-
-      <p>
-        Generate an API key using the CLI:
-      </p>
-
-      <pre className="language-bash">
-        <code>{`# Create a new agent and generate API key
-docker compose exec api bun run cli agent:create --name "my-assistant"
-
-# Output:
-# Agent created successfully!
-# API Key: ak_live_xxxxxxxxxxxxxxxxxxxx`}</code>
-      </pre>
-
-      <div className="not-prose my-4 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4">
-        <p className="text-sm text-amber-700 dark:text-amber-400">
-          <strong>Important:</strong> Save this API key securely. It will only be
-          shown once and cannot be retrieved later.
-        </p>
-      </div>
-
-      <h2>Step 3: Install the SDK</h2>
+      <h2>Step 1: Install the SDK</h2>
 
       <p>Install the Agent OTP SDK in your project:</p>
 
@@ -99,10 +55,10 @@ docker compose exec api bun run cli agent:create --name "my-assistant"
         </div>
       </div>
 
-      <h2>Step 4: Configure the client</h2>
+      <h2>Step 2: Initialize the Client</h2>
 
       <p>
-        Initialize the Agent OTP client with your API key. We recommend using
+        Create an Agent OTP client with your API key. We recommend using
         environment variables:
       </p>
 
@@ -110,115 +66,184 @@ docker compose exec api bun run cli agent:create --name "my-assistant"
         <code>{`// lib/otp.ts
 import { AgentOTPClient } from '@orrisai/agent-otp-sdk';
 
-export const otp = new AgentOTPClient({
-  apiKey: process.env.AGENT_OTP_KEY!,
-  // Point to your local or self-hosted instance
-  baseUrl: process.env.AGENT_OTP_URL || 'http://localhost:3000',
+export const otpClient = new AgentOTPClient({
+  apiKey: process.env.AGENT_OTP_API_KEY!,
+  // For self-hosted deployments:
+  // baseUrl: 'https://otp.your-domain.com',
 });`}</code>
       </pre>
 
-      <h2>Step 5: Request your first permission</h2>
+      <h2>Step 3: Generate Encryption Keys</h2>
 
       <p>
-        Now you can request permissions for sensitive operations. Here&apos;s a
-        complete example:
+        Agent OTP uses end-to-end encryption. Generate a key pair for your agent
+        and store the private key securely:
       </p>
 
       <pre className="language-typescript">
-        <code>{`import { otp } from './lib/otp';
+        <code>{`import {
+  generateKeyPair,
+  exportPublicKey,
+  exportPrivateKey,
+} from '@orrisai/agent-otp-sdk';
 
-async function sendInvoiceEmail(clientEmail: string, invoiceId: string) {
-  // Request permission to send an email
-  const permission = await otp.requestPermission({
-    action: 'email.send',
-    resource: \`email:\${clientEmail}\`,
-    scope: {
-      max_emails: 1,
-      allowed_recipients: [clientEmail],
+// Generate keys (do this once, store securely)
+const { publicKey, privateKey } = await generateKeyPair();
+
+// Export for storage
+const publicKeyBase64 = await exportPublicKey(publicKey);
+const privateKeyBase64 = await exportPrivateKey(privateKey);
+
+// Store privateKeyBase64 securely (e.g., environment variable, secrets manager)
+console.log('Public Key:', publicKeyBase64);
+console.log('Private Key:', privateKeyBase64); // Keep this secret!`}</code>
+      </pre>
+
+      <div className="not-prose my-4 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4">
+        <p className="text-sm text-amber-700 dark:text-amber-400">
+          <strong>Important:</strong> Store your private key securely. Never commit
+          it to source control. Use environment variables or a secrets manager.
+        </p>
+      </div>
+
+      <h2>Step 4: Request an OTP</h2>
+
+      <p>
+        Now you can request OTPs for verification. Here&apos;s a complete example:
+      </p>
+
+      <pre className="language-typescript">
+        <code>{`import { otpClient } from './lib/otp';
+import { importPrivateKey, exportPublicKey } from '@orrisai/agent-otp-sdk';
+
+async function signUpForService(email: string) {
+  // Load your keys (in production, load from secure storage)
+  const privateKey = await importPrivateKey(process.env.AGENT_PRIVATE_KEY!);
+  const publicKeyBase64 = process.env.AGENT_PUBLIC_KEY!;
+
+  // Request an OTP
+  const request = await otpClient.requestOTP({
+    reason: 'Sign up verification for Acme Inc',
+    expectedSender: 'Acme',
+    filter: {
+      sources: ['email'],
+      senderPattern: '*@acme.com',
     },
-    context: {
-      reason: \`Sending invoice #\${invoiceId} to client\`,
-      invoiceId,
+    publicKey: publicKeyBase64,
+    waitForOTP: true,
+    timeout: 120000, // Wait up to 2 minutes
+    onPendingApproval: (info) => {
+      console.log('Please approve at:', info.approvalUrl);
     },
-    waitForApproval: true, // Blocks until approved/denied
-    timeout: 60000, // 60 second timeout
   });
 
   // Check the result
-  if (permission.status === 'approved') {
-    console.log('Permission granted! Token:', permission.token);
+  if (request.status === 'otp_received') {
+    // Consume and decrypt the OTP
+    const { code, metadata } = await otpClient.consumeOTP(request.id, privateKey);
 
-    // Use the token to send the email
-    // The token is scoped to exactly this operation
-    await yourEmailService.send({
-      to: clientEmail,
-      subject: \`Invoice #\${invoiceId}\`,
-      // Pass the OTP token for verification
-      otpToken: permission.token,
-    });
+    console.log('OTP code:', code);
+    console.log('From:', metadata?.sender);
 
-    // Mark the token as used
-    await otp.useToken(permission.token, {
-      recipient: clientEmail,
-      invoiceId,
-    });
-
-    return { success: true };
-  } else if (permission.status === 'denied') {
-    console.log('Permission denied:', permission.reason);
-    return { success: false, error: 'Permission denied' };
-  } else {
-    console.log('Permission timed out');
-    return { success: false, error: 'Approval timeout' };
+    // Use the code to complete sign up
+    return { success: true, code };
+  } else if (request.status === 'denied') {
+    console.log('User denied the request');
+    return { success: false, error: 'denied' };
+  } else if (request.status === 'expired') {
+    console.log('Request expired');
+    return { success: false, error: 'expired' };
   }
+
+  return { success: false, error: request.status };
 }`}</code>
       </pre>
 
-      <h2>Step 6: Configure policies (optional)</h2>
+      <h2>Step 5: Set Up OTP Capture (Optional)</h2>
 
       <p>
-        By default, all permission requests require human approval. You can
-        configure policies to auto-approve safe operations:
+        To capture OTPs, you need to set up one of the capture methods:
       </p>
 
-      <pre className="language-yaml">
-        <code>{`# Auto-approve file reads under 1MB
-- name: "Auto-approve small file reads"
-  conditions:
-    action:
-      equals: "file.read"
-    scope.max_size:
-      less_than: 1048576
-  action: auto_approve
+      <div className="not-prose my-8 grid gap-4 sm:grid-cols-2">
+        <div className="rounded-lg border border-border p-4">
+          <h3 className="font-semibold mb-2">SMS (Android)</h3>
+          <p className="text-sm text-muted-foreground mb-3">
+            Install the Agent OTP Android app to capture SMS verification codes.
+          </p>
+          <Link
+            href="/docs/setup/android"
+            className="text-sm text-primary hover:underline"
+          >
+            Android Setup Guide →
+          </Link>
+        </div>
+        <div className="rounded-lg border border-border p-4">
+          <h3 className="font-semibold mb-2">Email (Gmail/IMAP)</h3>
+          <p className="text-sm text-muted-foreground mb-3">
+            Connect your email to capture verification codes from your inbox.
+          </p>
+          <Link
+            href="/docs/setup/email"
+            className="text-sm text-primary hover:underline"
+          >
+            Email Setup Guide →
+          </Link>
+        </div>
+      </div>
 
-# Require approval for any financial operation
-- name: "Financial operations"
-  conditions:
-    action:
-      starts_with: "bank."
-  action: require_approval
-  priority: 100`}</code>
-      </pre>
+      <h2>Understanding Request Status</h2>
 
-      <p>
-        See the{' '}
-        <Link href="/docs/concepts/policies" className="text-primary hover:underline">
-          Policies documentation
-        </Link>{' '}
-        for more details.
-      </p>
+      <p>OTP requests go through several states:</p>
 
-      <h2>Next steps</h2>
+      <div className="not-prose my-4 overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="py-2 px-4 text-left font-semibold">Status</th>
+              <th className="py-2 px-4 text-left font-semibold">Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">pending_approval</td>
+              <td className="py-2 px-4">Waiting for user to approve the request</td>
+            </tr>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">approved</td>
+              <td className="py-2 px-4">Approved, waiting for OTP to arrive</td>
+            </tr>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">otp_received</td>
+              <td className="py-2 px-4">OTP captured and ready to consume</td>
+            </tr>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">consumed</td>
+              <td className="py-2 px-4">OTP has been read (one-time use)</td>
+            </tr>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">denied</td>
+              <td className="py-2 px-4">User denied the request</td>
+            </tr>
+            <tr>
+              <td className="py-2 px-4 font-mono">expired</td>
+              <td className="py-2 px-4">Request expired before completion</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Next Steps</h2>
 
       <ul>
         <li>
-          <Link href="/docs/concepts/permissions" className="text-primary hover:underline">
-            Understand permissions and scopes
+          <Link href="/docs/concepts/how-it-works" className="text-primary hover:underline">
+            Learn how Agent OTP works in depth
           </Link>
         </li>
         <li>
-          <Link href="/docs/guides/telegram" className="text-primary hover:underline">
-            Set up Telegram notifications
+          <Link href="/docs/concepts/encryption" className="text-primary hover:underline">
+            Understand the encryption model
           </Link>
         </li>
         <li>
@@ -227,8 +252,8 @@ async function sendInvoiceEmail(clientEmail: string, invoiceId: string) {
           </Link>
         </li>
         <li>
-          <Link href="/docs/integrations/langchain" className="text-primary hover:underline">
-            Integrate with LangChain
+          <Link href="/docs/guides/self-hosting" className="text-primary hover:underline">
+            Self-host Agent OTP
           </Link>
         </li>
       </ul>
@@ -240,7 +265,7 @@ async function sendInvoiceEmail(clientEmail: string, invoiceId: string) {
         </p>
         <div className="flex flex-wrap gap-4 text-sm">
           <a
-            href="https://github.com/orristech/agent-otp/issues"
+            href="https://github.com/anthropics/agent-otp/issues"
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary hover:underline"
@@ -248,7 +273,7 @@ async function sendInvoiceEmail(clientEmail: string, invoiceId: string) {
             GitHub Issues
           </a>
           <a
-            href="https://github.com/orristech/agent-otp/discussions"
+            href="https://github.com/anthropics/agent-otp/discussions"
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary hover:underline"

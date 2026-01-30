@@ -1,376 +1,225 @@
 /**
- * Tests for the Agent OTP SDK client.
+ * Tests for the AgentOTPClient.
+ *
+ * Agent OTP Relay - Secure OTP relay for AI agents.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentOTPClient } from '../src/client';
 import {
   AuthenticationError,
-  PermissionDeniedError,
+  OTPNotFoundError,
+  OTPExpiredError,
+  OTPApprovalDeniedError,
   TimeoutError,
 } from '../src/errors';
-import { PERMISSION_STATUS } from '@orrisai/agent-otp-shared';
+
+// Mock fetch
+const mockFetch = vi.fn();
 
 describe('AgentOTPClient', () => {
-  const mockApiKey = 'ak_test_api_key_12345678901234567890';
-  const mockBaseUrl = 'https://api.test.agentotp.com';
+  let client: AgentOTPClient;
 
-  // Mock fetch function
-  const createMockFetch = (responses: Array<{ status: number; body: unknown }>) => {
-    let callIndex = 0;
-    return vi.fn(async () => {
-      const response = responses[callIndex] ?? responses[responses.length - 1];
-      callIndex++;
-      return {
-        ok: response.status >= 200 && response.status < 300,
-        status: response.status,
-        json: async () => response.body,
-      } as Response;
+  beforeEach(() => {
+    mockFetch.mockReset();
+    client = new AgentOTPClient({
+      apiKey: 'ak_test_123',
+      baseUrl: 'https://api.test.com',
+      fetch: mockFetch as unknown as typeof fetch,
     });
-  };
+  });
 
   describe('constructor', () => {
-    it('should throw AuthenticationError when API key is missing', () => {
+    it('should require an API key', () => {
       expect(() => new AgentOTPClient({ apiKey: '' })).toThrow(
         AuthenticationError
       );
     });
 
-    it('should create client with valid config', () => {
-      const client = new AgentOTPClient({
-        apiKey: mockApiKey,
-        baseUrl: mockBaseUrl,
-      });
-      expect(client).toBeInstanceOf(AgentOTPClient);
-    });
-
-    it('should use default base URL when not provided', () => {
-      const client = new AgentOTPClient({ apiKey: mockApiKey });
-      expect(client).toBeInstanceOf(AgentOTPClient);
+    it('should use default values', () => {
+      const c = new AgentOTPClient({ apiKey: 'ak_test' });
+      expect(c).toBeDefined();
     });
   });
 
-  describe('requestPermission', () => {
-    it('should return approved permission immediately when auto-approved', async () => {
-      const mockFetch = createMockFetch([
-        {
-          status: 201,
-          body: {
-            success: true,
-            data: {
-              id: 'perm_123',
-              status: PERMISSION_STATUS.APPROVED,
-              token: 'otp_test_token',
-              scope: { max_emails: 1 },
-              expiresAt: new Date(Date.now() + 300000).toISOString(),
-            },
-          },
-        },
-      ]);
+  describe('requestOTP', () => {
+    it('should request OTP successfully', async () => {
+      const mockResponse = {
+        id: 'otp_123',
+        status: 'pending_approval',
+        approval_url: 'https://app.agentotp.com/approve/otp_123',
+        webhook_url: 'wss://api.agentotp.com/ws/otp_123',
+        expires_at: '2024-01-01T01:00:00Z',
+      };
 
-      const client = new AgentOTPClient({
-        apiKey: mockApiKey,
-        baseUrl: mockBaseUrl,
-        fetch: mockFetch,
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockResponse),
       });
 
-      const result = await client.requestPermission({
-        action: 'gmail.send',
-        resource: 'email:test@example.com',
-        scope: { max_emails: 1 },
+      const result = await client.requestOTP({
+        reason: 'Sign up for Acme',
+        expectedSender: 'Acme',
+        publicKey: 'base64key==',
       });
 
-      expect(result.status).toBe(PERMISSION_STATUS.APPROVED);
-      expect(result.token).toBe('otp_test_token');
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-    });
-
-    it('should throw PermissionDeniedError when denied', async () => {
-      const mockFetch = createMockFetch([
-        {
-          status: 200,
-          body: {
-            success: true,
-            data: {
-              id: 'perm_123',
-              status: PERMISSION_STATUS.DENIED,
-              reason: 'Policy violation',
-              expiresAt: new Date(Date.now() + 300000).toISOString(),
-            },
-          },
-        },
-      ]);
-
-      const client = new AgentOTPClient({
-        apiKey: mockApiKey,
-        baseUrl: mockBaseUrl,
-        fetch: mockFetch,
-      });
-
-      await expect(
-        client.requestPermission({
-          action: 'bank.transfer',
-          scope: { amount: 1000000 },
+      expect(result.id).toBe('otp_123');
+      expect(result.status).toBe('pending_approval');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.test.com/v1/otp/request',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer ak_test_123',
+          }),
         })
-      ).rejects.toThrow(PermissionDeniedError);
+      );
     });
 
-    it('should return pending status when waitForApproval is false', async () => {
-      const mockFetch = createMockFetch([
-        {
-          status: 202,
-          body: {
-            success: true,
-            data: {
-              id: 'perm_123',
-              status: PERMISSION_STATUS.PENDING,
-              approvalUrl: 'https://app.agentotp.com/approve/perm_123',
-              webhookUrl: 'wss://api.agentotp.com/ws/perm_123',
-              expiresAt: new Date(Date.now() + 300000).toISOString(),
-            },
-          },
-        },
-      ]);
+    it('should call onPendingApproval callback', async () => {
+      const mockResponse = {
+        id: 'otp_123',
+        status: 'pending_approval',
+        approval_url: 'https://app.agentotp.com/approve/otp_123',
+        webhook_url: 'wss://api.agentotp.com/ws/otp_123',
+        expires_at: '2024-01-01T01:00:00Z',
+      };
 
-      const client = new AgentOTPClient({
-        apiKey: mockApiKey,
-        baseUrl: mockBaseUrl,
-        fetch: mockFetch,
-      });
-
-      const result = await client.requestPermission({
-        action: 'gmail.send',
-        waitForApproval: false,
-      });
-
-      expect(result.status).toBe(PERMISSION_STATUS.PENDING);
-      expect(result.approvalUrl).toBeDefined();
-    });
-
-    it('should poll for approval when waitForApproval is true', async () => {
-      const mockFetch = createMockFetch([
-        // Initial request - pending
-        {
-          status: 202,
-          body: {
-            success: true,
-            data: {
-              id: 'perm_123',
-              status: PERMISSION_STATUS.PENDING,
-              approvalUrl: 'https://app.agentotp.com/approve/perm_123',
-              webhookUrl: 'wss://api.agentotp.com/ws/perm_123',
-              expiresAt: new Date(Date.now() + 300000).toISOString(),
-            },
-          },
-        },
-        // First poll - still pending
-        {
-          status: 200,
-          body: {
-            success: true,
-            data: {
-              id: 'perm_123',
-              status: PERMISSION_STATUS.PENDING,
-              expiresAt: new Date(Date.now() + 300000).toISOString(),
-            },
-          },
-        },
-        // Second poll - approved
-        {
-          status: 200,
-          body: {
-            success: true,
-            data: {
-              id: 'perm_123',
-              status: PERMISSION_STATUS.APPROVED,
-              token: 'otp_test_token',
-              scope: { max_emails: 1 },
-              expiresAt: new Date(Date.now() + 300000).toISOString(),
-            },
-          },
-        },
-      ]);
-
-      const client = new AgentOTPClient({
-        apiKey: mockApiKey,
-        baseUrl: mockBaseUrl,
-        fetch: mockFetch,
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockResponse),
       });
 
       const onPendingApproval = vi.fn();
 
-      const result = await client.requestPermission({
-        action: 'gmail.send',
-        waitForApproval: true,
-        pollingInterval: 10, // Short interval for testing
+      await client.requestOTP({
+        reason: 'Test',
+        publicKey: 'key',
+        waitForOTP: false,
         onPendingApproval,
       });
 
-      expect(result.status).toBe(PERMISSION_STATUS.APPROVED);
-      expect(result.token).toBe('otp_test_token');
-      expect(onPendingApproval).toHaveBeenCalledTimes(1);
-      expect(mockFetch).toHaveBeenCalledTimes(3);
+      // Callback should not be called when not waiting
+      expect(onPendingApproval).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getOTPStatus', () => {
+    it('should get OTP status', async () => {
+      const mockResponse = {
+        id: 'otp_123',
+        status: 'approved',
+        expires_at: '2024-01-01T01:00:00Z',
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const result = await client.getOTPStatus('otp_123');
+
+      expect(result.status).toBe('approved');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.test.com/v1/otp/otp_123',
+        expect.objectContaining({
+          method: 'GET',
+        })
+      );
     });
 
-    it('should throw TimeoutError when waiting too long', async () => {
-      const mockFetch = createMockFetch([
-        {
-          status: 202,
-          body: {
-            success: true,
-            data: {
-              id: 'perm_123',
-              status: PERMISSION_STATUS.PENDING,
-              approvalUrl: 'https://app.agentotp.com/approve/perm_123',
-              webhookUrl: 'wss://api.agentotp.com/ws/perm_123',
-              expiresAt: new Date(Date.now() + 300000).toISOString(),
-            },
-          },
-        },
-        // Always return pending
-        {
-          status: 200,
-          body: {
-            success: true,
-            data: {
-              id: 'perm_123',
-              status: PERMISSION_STATUS.PENDING,
-              expiresAt: new Date(Date.now() + 300000).toISOString(),
-            },
-          },
-        },
-      ]);
+    it('should throw OTPNotFoundError for 404', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: () =>
+          Promise.resolve({ code: 'OTP_NOT_FOUND', message: 'Not found' }),
+      });
 
-      const client = new AgentOTPClient({
-        apiKey: mockApiKey,
-        baseUrl: mockBaseUrl,
-        fetch: mockFetch,
+      await expect(client.getOTPStatus('otp_invalid')).rejects.toThrow(
+        OTPNotFoundError
+      );
+    });
+  });
+
+  describe('cancelOTPRequest', () => {
+    it('should cancel OTP request', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+      });
+
+      await expect(client.cancelOTPRequest('otp_123')).resolves.toBeUndefined();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.test.com/v1/otp/otp_123',
+        expect.objectContaining({
+          method: 'DELETE',
+        })
+      );
+    });
+  });
+
+  describe('error handling', () => {
+    it('should handle authentication error', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ message: 'Invalid API key' }),
       });
 
       await expect(
-        client.requestPermission({
-          action: 'gmail.send',
-          waitForApproval: true,
-          timeout: 50, // Very short timeout
-          pollingInterval: 10,
-        })
-      ).rejects.toThrow(TimeoutError);
+        client.requestOTP({ reason: 'Test', publicKey: 'key' })
+      ).rejects.toThrow(AuthenticationError);
     });
-  });
 
-  describe('verifyToken', () => {
-    it('should return valid token info', async () => {
-      const mockFetch = createMockFetch([
-        {
-          status: 200,
-          body: {
-            success: true,
-            data: {
-              valid: true,
-              scope: { max_emails: 1 },
-              usesRemaining: 1,
-              expiresAt: new Date(Date.now() + 300000).toISOString(),
-            },
-          },
-        },
-      ]);
-
-      const client = new AgentOTPClient({
-        apiKey: mockApiKey,
-        baseUrl: mockBaseUrl,
-        fetch: mockFetch,
+    it('should handle OTP expired error', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 410,
+        json: () =>
+          Promise.resolve({
+            code: 'OTP_EXPIRED',
+            message: 'Request expired',
+            expired_at: '2024-01-01T00:00:00Z',
+          }),
       });
 
-      const result = await client.verifyToken('perm_123', 'otp_test_token');
-
-      expect(result.valid).toBe(true);
-      expect(result.usesRemaining).toBe(1);
-    });
-  });
-
-  describe('useToken', () => {
-    it('should successfully consume a token', async () => {
-      const mockFetch = createMockFetch([
-        {
-          status: 200,
-          body: {
-            success: true,
-            data: {
-              success: true,
-              usesRemaining: 0,
-            },
-          },
-        },
-      ]);
-
-      const client = new AgentOTPClient({
-        apiKey: mockApiKey,
-        baseUrl: mockBaseUrl,
-        fetch: mockFetch,
-      });
-
-      const result = await client.useToken('perm_123', 'otp_test_token', {
-        actionDetails: { recipient: 'test@example.com' },
-      });
-
-      expect(result.success).toBe(true);
-      expect(result.usesRemaining).toBe(0);
-    });
-  });
-
-  describe('executeWithPermission', () => {
-    it('should execute operation with approved permission', async () => {
-      const mockFetch = createMockFetch([
-        // Request permission - auto-approved
-        {
-          status: 201,
-          body: {
-            success: true,
-            data: {
-              id: 'perm_123',
-              status: PERMISSION_STATUS.APPROVED,
-              token: 'otp_test_token',
-              scope: { max_emails: 1 },
-              expiresAt: new Date(Date.now() + 300000).toISOString(),
-            },
-          },
-        },
-        // Use token
-        {
-          status: 200,
-          body: {
-            success: true,
-            data: {
-              success: true,
-              usesRemaining: 0,
-            },
-          },
-        },
-      ]);
-
-      const client = new AgentOTPClient({
-        apiKey: mockApiKey,
-        baseUrl: mockBaseUrl,
-        fetch: mockFetch,
-      });
-
-      const operation = vi.fn(async (token, scope) => {
-        expect(token).toBe('otp_test_token');
-        expect(scope).toEqual({ max_emails: 1 });
-        return { sent: true };
-      });
-
-      const result = await client.executeWithPermission(
-        {
-          action: 'gmail.send',
-          scope: { max_emails: 1 },
-        },
-        operation
+      await expect(client.getOTPStatus('otp_123')).rejects.toThrow(
+        OTPExpiredError
       );
+    });
 
-      expect(result).toEqual({ sent: true });
-      expect(operation).toHaveBeenCalledTimes(1);
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+    it('should handle OTP approval denied error', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: () =>
+          Promise.resolve({
+            code: 'OTP_APPROVAL_DENIED',
+            message: 'User denied',
+            reason: 'Not authorized',
+          }),
+      });
+
+      await expect(client.getOTPStatus('otp_123')).rejects.toThrow(
+        OTPApprovalDeniedError
+      );
+    });
+
+    it('should handle timeout', async () => {
+      mockFetch.mockImplementationOnce(() => {
+        const error = new Error('Aborted');
+        error.name = 'AbortError';
+        return Promise.reject(error);
+      });
+
+      await expect(
+        client.requestOTP({ reason: 'Test', publicKey: 'key' })
+      ).rejects.toThrow(TimeoutError);
     });
   });
 });

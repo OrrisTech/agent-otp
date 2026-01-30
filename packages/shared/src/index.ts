@@ -1,7 +1,9 @@
 /**
  * Agent OTP Shared Package
  *
- * Contains shared types, schemas, and constants used across all Agent OTP applications.
+ * Contains shared types, schemas, and constants for the Agent OTP Relay system.
+ * Agent OTP is a secure OTP relay service that helps AI agents receive
+ * verification codes (SMS/email) with user approval and E2E encryption.
  */
 
 // Export constants (values and types)
@@ -22,25 +24,26 @@ export {
   // Agent schemas
   createAgentSchema,
   updateAgentSchema,
-  // Policy schemas
-  policyConditionSchema,
-  policyActionSchema,
-  createPolicySchema,
-  updatePolicySchema,
-  // Permission schemas
-  permissionStatusSchema,
-  createPermissionRequestSchema,
-  // Token schemas
-  verifyTokenSchema,
-  useTokenSchema,
+  // OTP schemas
+  otpSourceSchema,
+  otpSourceFilterSchema,
+  otpRequestStatusSchema,
+  createOTPRequestSchema,
+  // Device schemas
+  deviceTypeSchema,
+  registerDeviceSchema,
+  // Email integration schemas
+  emailIntegrationTypeSchema,
+  createEmailIntegrationSchema,
   // Audit schemas
   auditEventTypeSchema,
   auditLogFilterSchema,
   // Approval schemas
-  approvalDecisionSchema,
-  // Schema-derived types (with different names than types.ts exports)
+  otpApprovalDecisionSchema,
+  // Schema-derived types
   type PaginationInput,
-  type VerifyTokenInput,
-  type UseTokenInput,
-  type ApprovalDecision,
+  type CreateOTPRequestInput,
+  type OTPApprovalDecision,
+  type RegisterDeviceInput,
+  type CreateEmailIntegrationInput,
 } from './schemas';

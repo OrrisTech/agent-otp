@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'TypeScript SDK',
-  description: 'Complete reference for the Agent OTP TypeScript SDK. Learn about the client API, types, and configuration options.',
+  description: 'Complete reference for the Agent OTP TypeScript SDK. Learn about the client API, encryption utilities, and error handling.',
 };
 
 export default function TypeScriptSDKPage() {
@@ -12,8 +12,8 @@ export default function TypeScriptSDKPage() {
       <h1>TypeScript SDK Reference</h1>
 
       <p className="lead text-xl text-muted-foreground">
-        The official TypeScript SDK for Agent OTP. Full type safety, async/await
-        support, and comprehensive error handling.
+        The official TypeScript SDK for Agent OTP. Full type safety, end-to-end
+        encryption support, and comprehensive error handling.
       </p>
 
       <h2>Installation</h2>
@@ -31,10 +31,10 @@ export default function TypeScriptSDKPage() {
       <pre className="language-typescript">
         <code>{`import { AgentOTPClient } from '@orrisai/agent-otp-sdk';
 
-const client = new AgentOTPClient(options: AgentOTPClientOptions);`}</code>
+const client = new AgentOTPClient(config: AgentOTPClientConfig);`}</code>
       </pre>
 
-      <h4>Options</h4>
+      <h4>Config Options</h4>
 
       <div className="not-prose my-4 overflow-x-auto">
         <table className="min-w-full text-sm">
@@ -57,162 +57,251 @@ const client = new AgentOTPClient(options: AgentOTPClientOptions);`}</code>
               <td className="py-2 px-4 font-mono">baseUrl</td>
               <td className="py-2 px-4 font-mono text-muted-foreground">string</td>
               <td className="py-2 px-4">No</td>
-              <td className="py-2 px-4">API base URL (for self-hosted)</td>
+              <td className="py-2 px-4">API base URL (default: https://api.agentotp.com)</td>
             </tr>
             <tr className="border-b border-border">
               <td className="py-2 px-4 font-mono">timeout</td>
               <td className="py-2 px-4 font-mono text-muted-foreground">number</td>
               <td className="py-2 px-4">No</td>
-              <td className="py-2 px-4">Default request timeout in ms (30000)</td>
+              <td className="py-2 px-4">Request timeout in ms (default: 30000)</td>
             </tr>
             <tr>
-              <td className="py-2 px-4 font-mono">retries</td>
+              <td className="py-2 px-4 font-mono">retryAttempts</td>
               <td className="py-2 px-4 font-mono text-muted-foreground">number</td>
               <td className="py-2 px-4">No</td>
-              <td className="py-2 px-4">Number of retry attempts (3)</td>
+              <td className="py-2 px-4">Number of retry attempts (default: 3)</td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <h3>requestPermission()</h3>
+      <h3>requestOTP()</h3>
 
-      <p>Request a new permission for a sensitive operation.</p>
+      <p>Request an OTP from the relay service.</p>
 
       <pre className="language-typescript">
-        <code>{`const permission = await client.requestPermission(
-  request: PermissionRequest
-): Promise<PermissionResponse>;`}</code>
+        <code>{`const request = await client.requestOTP(
+  options: RequestOTPOptions
+): Promise<OTPRequestResult>;`}</code>
       </pre>
 
-      <h4>PermissionRequest</h4>
+      <h4>RequestOTPOptions</h4>
 
       <pre className="language-typescript">
-        <code>{`interface PermissionRequest {
-  // The action being requested (e.g., 'email.send', 'file.read')
-  action: string;
+        <code>{`interface RequestOTPOptions {
+  // Why the agent needs this OTP (shown to user)
+  reason: string;
 
-  // The specific resource being accessed (optional)
-  resource?: string;
+  // Expected sender name (e.g., "Google", "GitHub")
+  expectedSender?: string;
 
-  // Scope constraints for the permission
-  scope: Record<string, unknown>;
+  // Filter criteria for matching OTPs
+  filter?: OTPSourceFilter;
 
-  // Additional context about the request
-  context?: Record<string, unknown>;
+  // Agent's public key for E2E encryption (base64)
+  publicKey: string;
 
-  // Time-to-live in seconds (default: 300, max: 3600)
+  // Request TTL in seconds (default: 300)
   ttl?: number;
 
-  // Whether to block until the request is approved/denied
-  waitForApproval?: boolean;
+  // Block until OTP arrives (default: false)
+  waitForOTP?: boolean;
 
-  // Timeout for waiting (in ms, default: 60000)
+  // Wait timeout in ms (default: 120000)
   timeout?: number;
 
-  // Callback when approval is pending
+  // Callback when pending user approval
   onPendingApproval?: (info: PendingApprovalInfo) => void;
+}
+
+interface OTPSourceFilter {
+  // OTP sources to accept: 'sms', 'email', 'whatsapp'
+  sources?: OTPSource[];
+
+  // Sender pattern with wildcards (e.g., '*@google.com')
+  senderPattern?: string;
+
+  // Content pattern to match in message
+  contentPattern?: string;
 }`}</code>
       </pre>
 
-      <h4>PermissionResponse</h4>
+      <h4>OTPRequestResult</h4>
 
       <pre className="language-typescript">
-        <code>{`interface PermissionResponse {
-  // Unique permission ID
+        <code>{`interface OTPRequestResult {
+  // Unique request ID
   id: string;
 
-  // Status: 'approved', 'denied', 'pending', 'expired'
-  status: PermissionStatus;
+  // Current status
+  status: OTPRequestStatus;
 
-  // The one-time token (only present when approved)
-  token?: string;
+  // URL for user to approve (if pending)
+  approvalUrl?: string;
 
-  // Granted scope (may be more restrictive than requested)
-  scope?: Record<string, unknown>;
+  // WebSocket URL for real-time updates
+  webhookUrl?: string;
 
-  // Expiration timestamp
+  // When the request expires
   expiresAt: string;
 
-  // Reason for denial (if denied)
+  // Denial reason (if denied)
   reason?: string;
+}
 
-  // URL for manual approval (if pending)
-  approvalUrl?: string;
+type OTPRequestStatus =
+  | 'pending_approval'  // Waiting for user approval
+  | 'approved'          // Approved, waiting for OTP
+  | 'otp_received'      // OTP ready to consume
+  | 'consumed'          // OTP has been read
+  | 'denied'            // User denied access
+  | 'expired'           // Request expired
+  | 'cancelled';        // Request was cancelled`}</code>
+      </pre>
+
+      <h4>Example</h4>
+
+      <pre className="language-typescript">
+        <code>{`const request = await client.requestOTP({
+  reason: 'Sign up verification for Acme Inc',
+  expectedSender: 'Acme',
+  filter: {
+    sources: ['email'],
+    senderPattern: '*@acme.com',
+  },
+  publicKey: await exportPublicKey(publicKey),
+  ttl: 300,
+  waitForOTP: true,
+  timeout: 120000,
+  onPendingApproval: (info) => {
+    console.log(\`Please approve at: \${info.approvalUrl}\`);
+  },
+});
+
+if (request.status === 'otp_received') {
+  const { code } = await client.consumeOTP(request.id, privateKey);
+  console.log('OTP code:', code);
+}`}</code>
+      </pre>
+
+      <h3>getOTPStatus()</h3>
+
+      <p>Check the current status of an OTP request.</p>
+
+      <pre className="language-typescript">
+        <code>{`const status = await client.getOTPStatus(
+  requestId: string
+): Promise<OTPRequestResult>;
+
+// Example
+const status = await client.getOTPStatus('otp_abc123');
+console.log(status.status); // 'pending_approval' | 'approved' | 'otp_received' | ...`}</code>
+      </pre>
+
+      <h3>consumeOTP()</h3>
+
+      <p>Consume and decrypt the OTP. This is a one-time operation - the OTP is deleted after reading.</p>
+
+      <pre className="language-typescript">
+        <code>{`const result = await client.consumeOTP(
+  requestId: string,
+  privateKey: CryptoKey
+): Promise<OTPConsumeResult>;
+
+interface OTPConsumeResult {
+  // The decrypted OTP code
+  code: string;
+
+  // Full message content (optional)
+  fullMessage?: string;
+
+  // Metadata about the OTP
+  metadata?: OTPMetadata;
+}
+
+interface OTPMetadata {
+  source: 'sms' | 'email' | 'whatsapp';
+  sender?: string;
+  subject?: string;
+  receivedAt: string;
 }`}</code>
       </pre>
 
       <h4>Example</h4>
 
       <pre className="language-typescript">
-        <code>{`const permission = await client.requestPermission({
-  action: 'email.send',
-  resource: 'email:client@example.com',
-  scope: {
-    max_emails: 1,
-    subject_pattern: '^Invoice.*',
-  },
-  context: {
-    reason: 'Sending monthly invoice',
-    triggeredBy: 'scheduled_task',
-  },
-  ttl: 300,
-  waitForApproval: true,
-  timeout: 60000,
-  onPendingApproval: (info) => {
-    console.log(\`Approval needed: \${info.approvalUrl}\`);
-  },
-});
+        <code>{`// Load your private key
+const privateKey = await importPrivateKey(process.env.AGENT_PRIVATE_KEY!);
 
-if (permission.status === 'approved') {
-  console.log('Token:', permission.token);
-}`}</code>
+// Consume the OTP
+const { code, metadata } = await client.consumeOTP('otp_abc123', privateKey);
+
+console.log('Code:', code);           // e.g., "123456"
+console.log('From:', metadata?.sender); // e.g., "noreply@acme.com"
+console.log('Source:', metadata?.source); // e.g., "email"`}</code>
       </pre>
 
-      <h3>verifyToken()</h3>
+      <h3>cancelOTPRequest()</h3>
 
-      <p>Verify that a token is still valid without consuming it.</p>
+      <p>Cancel a pending OTP request.</p>
 
       <pre className="language-typescript">
-        <code>{`const result = await client.verifyToken(
-  permissionId: string,
-  token: string
-): Promise<TokenVerification>;
+        <code>{`await client.cancelOTPRequest(requestId: string): Promise<void>;
 
-interface TokenVerification {
-  valid: boolean;
-  scope?: Record<string, unknown>;
-  usesRemaining?: number;
-  expiresAt?: string;
-}`}</code>
+// Example
+await client.cancelOTPRequest('otp_abc123');`}</code>
       </pre>
 
-      <h3>useToken()</h3>
+      <h2>Encryption Utilities</h2>
 
-      <p>Mark a token as used after performing the operation.</p>
+      <p>
+        The SDK provides utilities for generating and managing encryption keys
+        used for end-to-end encryption.
+      </p>
+
+      <h3>generateKeyPair()</h3>
+
+      <p>Generate a new RSA key pair for E2E encryption.</p>
 
       <pre className="language-typescript">
-        <code>{`const result = await client.useToken(
-  permissionId: string,
-  token: string,
-  details?: Record<string, unknown>
-): Promise<TokenUsageResult>;
+        <code>{`import { generateKeyPair } from '@orrisai/agent-otp-sdk';
 
-interface TokenUsageResult {
-  success: boolean;
-  usesRemaining: number;
-}`}</code>
+const { publicKey, privateKey } = await generateKeyPair();
+// publicKey: CryptoKey (for encrypting)
+// privateKey: CryptoKey (for decrypting)`}</code>
       </pre>
 
-      <h3>revokeToken()</h3>
+      <h3>exportPublicKey() / exportPrivateKey()</h3>
 
-      <p>Revoke a token before it expires or is used.</p>
+      <p>Export keys to base64 strings for storage or transmission.</p>
 
       <pre className="language-typescript">
-        <code>{`await client.revokeToken(
-  permissionId: string,
-  token: string
-): Promise<void>;`}</code>
+        <code>{`import {
+  exportPublicKey,
+  exportPrivateKey,
+} from '@orrisai/agent-otp-sdk';
+
+// Export to base64 strings
+const publicKeyBase64 = await exportPublicKey(publicKey);
+const privateKeyBase64 = await exportPrivateKey(privateKey);
+
+// Store these securely
+// publicKeyBase64 can be shared
+// privateKeyBase64 must be kept secret`}</code>
+      </pre>
+
+      <h3>importPrivateKey()</h3>
+
+      <p>Import a previously exported private key.</p>
+
+      <pre className="language-typescript">
+        <code>{`import { importPrivateKey } from '@orrisai/agent-otp-sdk';
+
+// Load from environment variable or secrets manager
+const privateKey = await importPrivateKey(process.env.AGENT_PRIVATE_KEY!);
+
+// Use for consuming OTPs
+const { code } = await client.consumeOTP(requestId, privateKey);`}</code>
       </pre>
 
       <h2>Error Handling</h2>
@@ -226,48 +315,110 @@ interface TokenUsageResult {
   ValidationError,
   RateLimitError,
   NetworkError,
+  TimeoutError,
+  OTPNotFoundError,
+  OTPExpiredError,
+  OTPAlreadyConsumedError,
+  OTPApprovalDeniedError,
+  DecryptionError,
 } from '@orrisai/agent-otp-sdk';
 
 try {
-  const permission = await client.requestPermission({...});
+  const { code } = await client.consumeOTP(requestId, privateKey);
 } catch (error) {
-  if (error instanceof AuthenticationError) {
-    // Invalid or expired API key
-    console.error('Auth failed:', error.message);
-  } else if (error instanceof ValidationError) {
-    // Invalid request parameters
-    console.error('Validation failed:', error.details);
+  if (error instanceof OTPApprovalDeniedError) {
+    console.log('User denied access:', error.reason);
+  } else if (error instanceof OTPExpiredError) {
+    console.log('Request expired at:', error.expiredAt);
+  } else if (error instanceof OTPAlreadyConsumedError) {
+    console.log('OTP already used at:', error.consumedAt);
+  } else if (error instanceof DecryptionError) {
+    console.log('Failed to decrypt - wrong private key?');
+  } else if (error instanceof AuthenticationError) {
+    console.log('Invalid API key');
   } else if (error instanceof RateLimitError) {
-    // Rate limit exceeded
-    console.error('Rate limited, retry after:', error.retryAfter);
-  } else if (error instanceof NetworkError) {
-    // Network connectivity issue
-    console.error('Network error:', error.message);
+    console.log('Rate limited, retry after:', error.retryAfter);
   } else if (error instanceof AgentOTPError) {
-    // Other API error
-    console.error('API error:', error.code, error.message);
+    console.log('API error:', error.code, error.message);
   }
 }`}</code>
       </pre>
 
+      <h3>Error Types</h3>
+
+      <div className="not-prose my-4 overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="py-2 px-4 text-left font-semibold">Error</th>
+              <th className="py-2 px-4 text-left font-semibold">Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">AuthenticationError</td>
+              <td className="py-2 px-4">Invalid or missing API key</td>
+            </tr>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">ValidationError</td>
+              <td className="py-2 px-4">Invalid request parameters</td>
+            </tr>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">RateLimitError</td>
+              <td className="py-2 px-4">Rate limit exceeded (has retryAfter)</td>
+            </tr>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">TimeoutError</td>
+              <td className="py-2 px-4">Request timed out</td>
+            </tr>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">NetworkError</td>
+              <td className="py-2 px-4">Network connectivity issue</td>
+            </tr>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">OTPNotFoundError</td>
+              <td className="py-2 px-4">No matching OTP request found</td>
+            </tr>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">OTPExpiredError</td>
+              <td className="py-2 px-4">OTP request has expired (has expiredAt)</td>
+            </tr>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">OTPAlreadyConsumedError</td>
+              <td className="py-2 px-4">OTP already read (has consumedAt)</td>
+            </tr>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">OTPApprovalDeniedError</td>
+              <td className="py-2 px-4">User denied OTP access (has reason)</td>
+            </tr>
+            <tr>
+              <td className="py-2 px-4 font-mono">DecryptionError</td>
+              <td className="py-2 px-4">Failed to decrypt OTP payload</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
       <h2>Types</h2>
 
-      <p>
-        All types are exported from the package for use in your application:
-      </p>
+      <p>All types are exported from the package:</p>
 
       <pre className="language-typescript">
         <code>{`import type {
-  AgentOTPClientOptions,
-  PermissionRequest,
-  PermissionResponse,
-  PermissionStatus,
-  TokenVerification,
-  TokenUsageResult,
+  // Client config
+  AgentOTPClientConfig,
+
+  // OTP types
+  OTPSource,
+  OTPRequestStatus,
+  OTPSourceFilter,
+  OTPMetadata,
+  OTPConsumeResult,
+
+  // Request/Response
+  RequestOTPOptions,
+  OTPRequestResult,
   PendingApprovalInfo,
-  Policy,
-  PolicyCondition,
-  Agent,
 } from '@orrisai/agent-otp-sdk';`}</code>
       </pre>
 
@@ -275,24 +426,28 @@ try {
 
       <ul>
         <li>
-          <strong>Store API keys securely</strong> - Use environment variables,
-          never commit API keys to source control
+          <strong>Store private keys securely</strong> - Use environment variables
+          or a secrets manager, never commit to source control
         </li>
         <li>
-          <strong>Use descriptive context</strong> - Provide clear reasons for
-          permission requests to help with approval decisions
+          <strong>Generate keys once</strong> - Reuse the same key pair for your
+          agent; only regenerate if compromised
         </li>
         <li>
-          <strong>Handle all statuses</strong> - Always handle approved, denied,
-          pending, and expired statuses
+          <strong>Provide clear reasons</strong> - Help users make informed
+          approval decisions with descriptive reasons
         </li>
         <li>
-          <strong>Set appropriate timeouts</strong> - Balance between giving
-          humans time to approve and not blocking too long
+          <strong>Use filters</strong> - Narrow down expected senders to avoid
+          capturing unrelated OTPs
         </li>
         <li>
-          <strong>Use tokens immediately</strong> - Tokens are ephemeral; use
-          them right after receiving approval
+          <strong>Handle all statuses</strong> - Always handle denied, expired,
+          and error cases gracefully
+        </li>
+        <li>
+          <strong>Consume promptly</strong> - Once an OTP is received, consume it
+          quickly as requests have TTLs
         </li>
       </ul>
 
@@ -305,13 +460,13 @@ try {
           </Link>
         </li>
         <li>
-          <Link href="/docs/sdk/errors" className="text-primary hover:underline">
-            Error Handling Guide
+          <Link href="/docs/concepts/encryption" className="text-primary hover:underline">
+            Encryption Guide
           </Link>
         </li>
         <li>
-          <Link href="/docs/api/permissions" className="text-primary hover:underline">
-            Permissions API Reference
+          <Link href="/docs/sdk/errors" className="text-primary hover:underline">
+            Error Handling Guide
           </Link>
         </li>
       </ul>

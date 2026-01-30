@@ -27,16 +27,19 @@ export default function ErrorsPage() {
 ├── AuthenticationError
 ├── ValidationError
 ├── RateLimitError
+├── TimeoutError
 ├── NetworkError
-├── PermissionDeniedError
-├── TokenError
-│   ├── TokenExpiredError
-│   ├── TokenRevokedError
-│   └── TokenUsedError
-└── ServerError`}</code>
+├── ServerError
+└── OTP Errors
+    ├── OTPNotFoundError
+    ├── OTPExpiredError
+    ├── OTPAlreadyConsumedError
+    ├── OTPApprovalDeniedError
+    ├── OTPCancelledError
+    └── DecryptionError`}</code>
       </pre>
 
-      <h2>Error Types</h2>
+      <h2>Base Error</h2>
 
       <h3>AgentOTPError</h3>
 
@@ -44,29 +47,27 @@ export default function ErrorsPage() {
 
       <pre className="language-typescript">
         <code>{`interface AgentOTPError extends Error {
-  code: string;      // Error code (e.g., 'AUTH_FAILED')
-  message: string;   // Human-readable message
-  status?: number;   // HTTP status code (if applicable)
-  details?: unknown; // Additional error details
+  code: string;                    // Error code (e.g., 'OTP_EXPIRED')
+  message: string;                 // Human-readable message
+  details?: Record<string, unknown>; // Additional error details
 }`}</code>
       </pre>
 
+      <h2>Common Errors</h2>
+
       <h3>AuthenticationError</h3>
 
-      <p>Thrown when authentication fails.</p>
+      <p>Thrown when authentication fails (invalid or missing API key).</p>
 
       <pre className="language-typescript">
         <code>{`import { AuthenticationError } from '@orrisai/agent-otp-sdk';
 
 try {
-  await client.requestPermission({...});
+  await client.requestOTP({...});
 } catch (error) {
   if (error instanceof AuthenticationError) {
-    // Error codes:
-    // - 'INVALID_API_KEY': API key is malformed
-    // - 'EXPIRED_API_KEY': API key has been revoked or expired
-    // - 'MISSING_API_KEY': No API key provided
-    console.log('Auth failed:', error.code);
+    console.log('Auth failed:', error.message);
+    // Check your API key configuration
   }
 }`}</code>
       </pre>
@@ -79,17 +80,14 @@ try {
         <code>{`import { ValidationError } from '@orrisai/agent-otp-sdk';
 
 try {
-  await client.requestPermission({
-    action: '', // Invalid: empty string
-    scope: { max_size: -1 }, // Invalid: negative
+  await client.requestOTP({
+    reason: '', // Invalid: empty string
+    publicKey: 'invalid', // Invalid: malformed key
   });
 } catch (error) {
   if (error instanceof ValidationError) {
-    console.log('Validation errors:', error.details);
-    // {
-    //   action: 'action is required',
-    //   'scope.max_size': 'must be a positive integer'
-    // }
+    console.log('Validation failed:', error.message);
+    console.log('Details:', error.details);
   }
 }`}</code>
       </pre>
@@ -102,17 +100,35 @@ try {
         <code>{`import { RateLimitError } from '@orrisai/agent-otp-sdk';
 
 try {
-  await client.requestPermission({...});
+  await client.requestOTP({...});
 } catch (error) {
   if (error instanceof RateLimitError) {
     console.log('Rate limited');
     console.log('Retry after:', error.retryAfter, 'seconds');
-    console.log('Limit:', error.limit);
-    console.log('Remaining:', error.remaining);
 
     // Wait and retry
-    await sleep(error.retryAfter * 1000);
-    await client.requestPermission({...});
+    await sleep(error.retryAfter! * 1000);
+    await client.requestOTP({...});
+  }
+}`}</code>
+      </pre>
+
+      <h3>TimeoutError</h3>
+
+      <p>Thrown when a request times out.</p>
+
+      <pre className="language-typescript">
+        <code>{`import { TimeoutError } from '@orrisai/agent-otp-sdk';
+
+try {
+  await client.requestOTP({
+    waitForOTP: true,
+    timeout: 60000, // 60 seconds
+  });
+} catch (error) {
+  if (error instanceof TimeoutError) {
+    console.log('Request timed out');
+    // The OTP may still arrive - check status later
   }
 }`}</code>
       </pre>
@@ -125,61 +141,11 @@ try {
         <code>{`import { NetworkError } from '@orrisai/agent-otp-sdk';
 
 try {
-  await client.requestPermission({...});
+  await client.requestOTP({...});
 } catch (error) {
   if (error instanceof NetworkError) {
-    // Error codes:
-    // - 'TIMEOUT': Request timed out
-    // - 'CONNECTION_REFUSED': Could not connect to server
-    // - 'DNS_ERROR': DNS resolution failed
-    console.log('Network error:', error.code);
-  }
-}`}</code>
-      </pre>
-
-      <h3>PermissionDeniedError</h3>
-
-      <p>Thrown when a permission request is denied by policy or user.</p>
-
-      <pre className="language-typescript">
-        <code>{`import { PermissionDeniedError } from '@orrisai/agent-otp-sdk';
-
-try {
-  await client.requestPermission({
-    action: 'bank.transfer',
-    waitForApproval: true,
-  });
-} catch (error) {
-  if (error instanceof PermissionDeniedError) {
-    console.log('Permission denied');
-    console.log('Reason:', error.reason);
-    console.log('Denied by:', error.deniedBy); // 'policy' or 'user'
-  }
-}`}</code>
-      </pre>
-
-      <h3>Token Errors</h3>
-
-      <p>Errors related to token operations:</p>
-
-      <pre className="language-typescript">
-        <code>{`import {
-  TokenExpiredError,
-  TokenRevokedError,
-  TokenUsedError,
-} from '@orrisai/agent-otp-sdk';
-
-try {
-  await client.useToken(permissionId, token);
-} catch (error) {
-  if (error instanceof TokenExpiredError) {
-    console.log('Token expired at:', error.expiredAt);
-    // Request a new permission
-  } else if (error instanceof TokenRevokedError) {
-    console.log('Token was revoked at:', error.revokedAt);
-    console.log('Revoked by:', error.revokedBy);
-  } else if (error instanceof TokenUsedError) {
-    console.log('Token already used at:', error.usedAt);
+    console.log('Network error:', error.message);
+    // Retry with exponential backoff
   }
 }`}</code>
       </pre>
@@ -192,12 +158,118 @@ try {
         <code>{`import { ServerError } from '@orrisai/agent-otp-sdk';
 
 try {
-  await client.requestPermission({...});
+  await client.requestOTP({...});
 } catch (error) {
   if (error instanceof ServerError) {
     console.log('Server error:', error.status);
     console.log('Request ID:', error.requestId);
     // Report to support with requestId
+  }
+}`}</code>
+      </pre>
+
+      <h2>OTP-Specific Errors</h2>
+
+      <h3>OTPNotFoundError</h3>
+
+      <p>Thrown when no matching OTP request is found.</p>
+
+      <pre className="language-typescript">
+        <code>{`import { OTPNotFoundError } from '@orrisai/agent-otp-sdk';
+
+try {
+  await client.getOTPStatus('otp_invalid_id');
+} catch (error) {
+  if (error instanceof OTPNotFoundError) {
+    console.log('OTP request not found');
+  }
+}`}</code>
+      </pre>
+
+      <h3>OTPExpiredError</h3>
+
+      <p>Thrown when an OTP request has expired.</p>
+
+      <pre className="language-typescript">
+        <code>{`import { OTPExpiredError } from '@orrisai/agent-otp-sdk';
+
+try {
+  await client.consumeOTP(requestId, privateKey);
+} catch (error) {
+  if (error instanceof OTPExpiredError) {
+    console.log('Request expired at:', error.expiredAt);
+    // Create a new OTP request
+  }
+}`}</code>
+      </pre>
+
+      <h3>OTPAlreadyConsumedError</h3>
+
+      <p>Thrown when attempting to consume an OTP that has already been read.</p>
+
+      <pre className="language-typescript">
+        <code>{`import { OTPAlreadyConsumedError } from '@orrisai/agent-otp-sdk';
+
+try {
+  await client.consumeOTP(requestId, privateKey);
+} catch (error) {
+  if (error instanceof OTPAlreadyConsumedError) {
+    console.log('OTP already consumed at:', error.consumedAt);
+    // OTPs are one-time use - request a new one if needed
+  }
+}`}</code>
+      </pre>
+
+      <h3>OTPApprovalDeniedError</h3>
+
+      <p>Thrown when a user denies an OTP request.</p>
+
+      <pre className="language-typescript">
+        <code>{`import { OTPApprovalDeniedError } from '@orrisai/agent-otp-sdk';
+
+try {
+  await client.requestOTP({
+    reason: 'Sign up verification',
+    waitForOTP: true,
+  });
+} catch (error) {
+  if (error instanceof OTPApprovalDeniedError) {
+    console.log('User denied the request');
+    console.log('Reason:', error.reason);
+  }
+}`}</code>
+      </pre>
+
+      <h3>OTPCancelledError</h3>
+
+      <p>Thrown when an OTP request was cancelled.</p>
+
+      <pre className="language-typescript">
+        <code>{`import { OTPCancelledError } from '@orrisai/agent-otp-sdk';
+
+try {
+  await client.getOTPStatus(requestId);
+} catch (error) {
+  if (error instanceof OTPCancelledError) {
+    console.log('Request was cancelled');
+  }
+}`}</code>
+      </pre>
+
+      <h3>DecryptionError</h3>
+
+      <p>Thrown when OTP decryption fails (usually wrong private key).</p>
+
+      <pre className="language-typescript">
+        <code>{`import { DecryptionError } from '@orrisai/agent-otp-sdk';
+
+try {
+  await client.consumeOTP(requestId, privateKey);
+} catch (error) {
+  if (error instanceof DecryptionError) {
+    console.log('Failed to decrypt OTP');
+    // Verify you are using the correct private key
+    // for the public key used in the request
   }
 }`}</code>
       </pre>
@@ -215,54 +287,64 @@ try {
           </thead>
           <tbody>
             <tr className="border-b border-border">
-              <td className="py-2 px-4 font-mono">INVALID_API_KEY</td>
+              <td className="py-2 px-4 font-mono">AUTHENTICATION_ERROR</td>
               <td className="py-2 px-4">401</td>
-              <td className="py-2 px-4">API key is invalid or malformed</td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2 px-4 font-mono">EXPIRED_API_KEY</td>
-              <td className="py-2 px-4">401</td>
-              <td className="py-2 px-4">API key has expired or been revoked</td>
+              <td className="py-2 px-4">Invalid or missing API key</td>
             </tr>
             <tr className="border-b border-border">
               <td className="py-2 px-4 font-mono">VALIDATION_ERROR</td>
-              <td className="py-2 px-4">400</td>
+              <td className="py-2 px-4">422</td>
               <td className="py-2 px-4">Request validation failed</td>
             </tr>
             <tr className="border-b border-border">
-              <td className="py-2 px-4 font-mono">RATE_LIMITED</td>
+              <td className="py-2 px-4 font-mono">RATE_LIMIT_ERROR</td>
               <td className="py-2 px-4">429</td>
               <td className="py-2 px-4">Rate limit exceeded</td>
             </tr>
             <tr className="border-b border-border">
-              <td className="py-2 px-4 font-mono">PERMISSION_DENIED</td>
-              <td className="py-2 px-4">403</td>
-              <td className="py-2 px-4">Permission request was denied</td>
+              <td className="py-2 px-4 font-mono">TIMEOUT_ERROR</td>
+              <td className="py-2 px-4">-</td>
+              <td className="py-2 px-4">Request timed out</td>
             </tr>
             <tr className="border-b border-border">
-              <td className="py-2 px-4 font-mono">TOKEN_EXPIRED</td>
-              <td className="py-2 px-4">410</td>
-              <td className="py-2 px-4">Token has expired</td>
+              <td className="py-2 px-4 font-mono">NETWORK_ERROR</td>
+              <td className="py-2 px-4">-</td>
+              <td className="py-2 px-4">Network connectivity failed</td>
             </tr>
             <tr className="border-b border-border">
-              <td className="py-2 px-4 font-mono">TOKEN_REVOKED</td>
-              <td className="py-2 px-4">410</td>
-              <td className="py-2 px-4">Token was revoked</td>
+              <td className="py-2 px-4 font-mono">SERVER_ERROR</td>
+              <td className="py-2 px-4">5xx</td>
+              <td className="py-2 px-4">Server error</td>
             </tr>
             <tr className="border-b border-border">
-              <td className="py-2 px-4 font-mono">TOKEN_USED</td>
-              <td className="py-2 px-4">410</td>
-              <td className="py-2 px-4">Token has already been used</td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2 px-4 font-mono">NOT_FOUND</td>
+              <td className="py-2 px-4 font-mono">OTP_NOT_FOUND</td>
               <td className="py-2 px-4">404</td>
-              <td className="py-2 px-4">Resource not found</td>
+              <td className="py-2 px-4">OTP request not found</td>
+            </tr>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">OTP_EXPIRED</td>
+              <td className="py-2 px-4">410</td>
+              <td className="py-2 px-4">OTP request has expired</td>
+            </tr>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">OTP_ALREADY_CONSUMED</td>
+              <td className="py-2 px-4">410</td>
+              <td className="py-2 px-4">OTP already consumed</td>
+            </tr>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">OTP_APPROVAL_DENIED</td>
+              <td className="py-2 px-4">403</td>
+              <td className="py-2 px-4">User denied OTP access</td>
+            </tr>
+            <tr className="border-b border-border">
+              <td className="py-2 px-4 font-mono">OTP_CANCELLED</td>
+              <td className="py-2 px-4">410</td>
+              <td className="py-2 px-4">OTP request cancelled</td>
             </tr>
             <tr>
-              <td className="py-2 px-4 font-mono">SERVER_ERROR</td>
-              <td className="py-2 px-4">500</td>
-              <td className="py-2 px-4">Internal server error</td>
+              <td className="py-2 px-4 font-mono">DECRYPTION_ERROR</td>
+              <td className="py-2 px-4">-</td>
+              <td className="py-2 px-4">Failed to decrypt OTP payload</td>
             </tr>
           </tbody>
         </table>
@@ -270,44 +352,39 @@ try {
 
       <h2>Best Practices</h2>
 
-      <h3>1. Always Catch Specific Errors</h3>
+      <h3>1. Handle Specific Errors</h3>
 
       <pre className="language-typescript">
         <code>{`import {
   AgentOTPError,
   AuthenticationError,
-  ValidationError,
+  OTPApprovalDeniedError,
+  OTPExpiredError,
+  DecryptionError,
   RateLimitError,
-  NetworkError,
-  PermissionDeniedError,
 } from '@orrisai/agent-otp-sdk';
 
-async function requestWithErrorHandling() {
+async function getOTPCode(requestId: string, privateKey: CryptoKey) {
   try {
-    return await client.requestPermission({...});
+    return await client.consumeOTP(requestId, privateKey);
   } catch (error) {
-    if (error instanceof AuthenticationError) {
-      // Handle auth errors (check API key)
-      throw new Error('Configuration error: invalid API key');
+    if (error instanceof OTPApprovalDeniedError) {
+      return { error: 'User denied access', reason: error.reason };
     }
-    if (error instanceof ValidationError) {
-      // Handle validation errors (fix request)
-      throw new Error(\`Invalid request: \${JSON.stringify(error.details)}\`);
+    if (error instanceof OTPExpiredError) {
+      return { error: 'Request expired', expiredAt: error.expiredAt };
+    }
+    if (error instanceof DecryptionError) {
+      throw new Error('Wrong private key - check your key configuration');
+    }
+    if (error instanceof AuthenticationError) {
+      throw new Error('Invalid API key - check your configuration');
     }
     if (error instanceof RateLimitError) {
-      // Handle rate limits (wait and retry)
-      await sleep(error.retryAfter * 1000);
-      return requestWithErrorHandling();
+      // Wait and retry
+      await sleep(error.retryAfter! * 1000);
+      return getOTPCode(requestId, privateKey);
     }
-    if (error instanceof NetworkError) {
-      // Handle network errors (retry with backoff)
-      throw new Error('Network error, please try again');
-    }
-    if (error instanceof PermissionDeniedError) {
-      // Handle denials (inform user)
-      throw new Error(\`Permission denied: \${error.reason}\`);
-    }
-    // Re-throw unknown errors
     throw error;
   }
 }`}</code>
@@ -316,24 +393,24 @@ async function requestWithErrorHandling() {
       <h3>2. Implement Retry Logic</h3>
 
       <pre className="language-typescript">
-        <code>{`async function requestWithRetry(
-  request: PermissionRequest,
+        <code>{`async function requestOTPWithRetry(
+  options: RequestOTPOptions,
   maxRetries = 3,
-): Promise<PermissionResponse> {
+): Promise<OTPRequestResult> {
   let lastError: Error | undefined;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      return await client.requestPermission(request);
+      return await client.requestOTP(options);
     } catch (error) {
-      lastError = error;
+      lastError = error as Error;
 
       if (error instanceof RateLimitError) {
-        await sleep(error.retryAfter * 1000);
+        await sleep(error.retryAfter! * 1000);
         continue;
       }
 
-      if (error instanceof NetworkError) {
+      if (error instanceof NetworkError || error instanceof TimeoutError) {
         // Exponential backoff
         await sleep(Math.pow(2, attempt) * 1000);
         continue;
@@ -352,14 +429,14 @@ async function requestWithErrorHandling() {
 
       <pre className="language-typescript">
         <code>{`try {
-  await client.requestPermission({...});
+  await client.consumeOTP(requestId, privateKey);
 } catch (error) {
   if (error instanceof AgentOTPError) {
     console.error('Agent OTP Error', {
       code: error.code,
       message: error.message,
-      status: error.status,
-      // Don't log sensitive details like tokens
+      requestId, // Include context
+      // Don't log sensitive data like private keys
     });
   }
   throw error;
@@ -375,8 +452,8 @@ async function requestWithErrorHandling() {
           </Link>
         </li>
         <li>
-          <Link href="/docs/api/permissions" className="text-primary hover:underline">
-            Permissions API
+          <Link href="/docs/quickstart" className="text-primary hover:underline">
+            Quick Start Guide
           </Link>
         </li>
         <li>

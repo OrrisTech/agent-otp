@@ -1,12 +1,18 @@
 /**
- * Core type definitions for Agent OTP system.
+ * Core type definitions for Agent OTP Relay system.
+ *
+ * Agent OTP is a secure OTP relay service that helps AI agents
+ * receive verification codes (SMS/email) with user approval
+ * and end-to-end encryption.
  */
 
 import type {
-  PermissionStatus,
-  PolicyAction,
+  OTPRequestStatus,
+  OTPSource,
   DecisionBy,
   AuditEventType,
+  DeviceType,
+  EmailIntegrationType,
 } from './constants';
 
 // ============================================================================
@@ -75,80 +81,41 @@ export interface UpdateAgentInput {
 }
 
 // ============================================================================
-// Policy Types
+// OTP Source Filter Types
 // ============================================================================
 
-export interface PolicyCondition {
-  equals?: string | number | boolean;
-  notEquals?: string | number | boolean;
-  lessThan?: number;
-  greaterThan?: number;
-  lessThanOrEqual?: number;
-  greaterThanOrEqual?: number;
-  startsWith?: string;
-  endsWith?: string;
-  contains?: string;
-  matches?: string; // Regex pattern
-  in?: (string | number)[];
-  notIn?: (string | number)[];
-  exists?: boolean;
-}
+/**
+ * Filter criteria for matching incoming OTPs.
+ */
+export interface OTPSourceFilter {
+  /** Only accept OTPs from these sources */
+  sources?: OTPSource[];
 
-export interface Policy {
-  id: UUID;
-  userId: UUID;
-  agentId: UUID | null;
-  name: string;
-  description: string | null;
-  priority: number;
-  conditions: Record<string, PolicyCondition>;
-  action: PolicyAction;
-  scopeTemplate: Record<string, unknown> | null;
-  isActive: boolean;
-  createdAt: ISODateString;
-  updatedAt: ISODateString;
-}
+  /** Sender pattern matching (e.g., "Google", "+1555*", "*@acme.com") */
+  senderPattern?: string;
 
-export interface CreatePolicyInput {
-  agentId?: UUID;
-  name: string;
-  description?: string;
-  priority?: number;
-  conditions: Record<string, PolicyCondition>;
-  action: PolicyAction;
-  scopeTemplate?: Record<string, unknown>;
-}
+  /** Content/subject pattern matching (regex) */
+  contentPattern?: string;
 
-export interface UpdatePolicyInput {
-  name?: string;
-  description?: string;
-  priority?: number;
-  conditions?: Record<string, PolicyCondition>;
-  action?: PolicyAction;
-  scopeTemplate?: Record<string, unknown>;
-  isActive?: boolean;
-}
-
-export interface PolicyDecision {
-  policy?: Policy;
-  action: PolicyAction;
-  scope?: Record<string, unknown>;
-  reason?: string;
+  /** Only accept OTPs received after this timestamp */
+  receivedAfter?: ISODateString;
 }
 
 // ============================================================================
-// Permission Request Types
+// OTP Request Types
 // ============================================================================
 
-export interface PermissionRequest {
+/**
+ * An OTP request from an agent.
+ */
+export interface OTPRequest {
   id: UUID;
   agentId: UUID;
-  action: string;
-  resource: string | null;
-  scope: Record<string, unknown>;
-  context: Record<string, unknown>;
-  status: PermissionStatus;
-  policyId: UUID | null;
+  reason: string;
+  expectedSender: string | null;
+  filter: OTPSourceFilter;
+  publicKey: string; // Agent's public key for E2E encryption
+  status: OTPRequestStatus;
   decisionReason: string | null;
   decidedBy: DecisionBy | null;
   decidedAt: ISODateString | null;
@@ -156,57 +123,155 @@ export interface PermissionRequest {
   createdAt: ISODateString;
 }
 
-export interface CreatePermissionRequestInput {
-  action: string;
-  resource?: string;
-  scope: Record<string, unknown>;
-  context?: Record<string, unknown>;
-  ttl?: number; // Time-to-live in seconds
+/**
+ * Input for creating an OTP request.
+ */
+export interface CreateOTPRequestInput {
+  /** Human-readable reason why the agent needs the OTP */
+  reason: string;
+
+  /** Expected sender/service (e.g., "Google", "GitHub") */
+  expectedSender?: string;
+
+  /** Filter criteria for OTP matching */
+  filter?: OTPSourceFilter;
+
+  /** Agent's public key for E2E encryption (base64) */
+  publicKey: string;
+
+  /** Time-to-live in seconds (default: 300) */
+  ttl?: number;
 }
 
-export interface PermissionRequestResult {
+/**
+ * Result of an OTP request operation.
+ */
+export interface OTPRequestResult {
   id: UUID;
-  status: PermissionStatus;
-  token?: string; // Only returned on approval
-  scope?: Record<string, unknown>;
-  approvalUrl?: string; // For pending requests requiring human approval
-  webhookUrl?: string; // WebSocket URL for real-time status updates
+  status: OTPRequestStatus;
+  approvalUrl?: string; // URL for user to approve
+  webhookUrl?: string; // WebSocket URL for real-time updates
   expiresAt: ISODateString;
-  reason?: string;
+  reason?: string; // Reason if denied
 }
 
 // ============================================================================
-// Token Types
+// Captured OTP Types
 // ============================================================================
 
-export interface Token {
+/**
+ * A captured OTP message.
+ */
+export interface CapturedOTP {
   id: UUID;
-  permissionRequestId: UUID;
-  scope: Record<string, unknown>;
-  usesRemaining: number;
+  userId: UUID;
+  otpRequestId: UUID | null;
+  source: OTPSource;
+  sender: string;
+  encryptedCode: string; // Encrypted with agent's public key
+  encryptedContent: string | null; // Full message content (optional)
+  contentPreview: string | null; // First N chars for user verification
+  metadata: OTPMetadata;
+  receivedAt: ISODateString;
+  consumedAt: ISODateString | null;
   expiresAt: ISODateString;
-  usedAt: ISODateString | null;
-  revokedAt: ISODateString | null;
   createdAt: ISODateString;
 }
 
-export interface TokenVerificationResult {
-  valid: boolean;
-  scope?: Record<string, unknown>;
-  usesRemaining?: number;
-  expiresAt?: ISODateString;
-  reason?: string;
+/**
+ * Metadata about a captured OTP.
+ */
+export interface OTPMetadata {
+  /** Original sender identifier */
+  sender: string;
+
+  /** Source channel (sms, email, whatsapp) */
+  source: OTPSource;
+
+  /** When the OTP was received */
+  receivedAt: ISODateString;
+
+  /** Partial preview of the message (for user verification) */
+  preview?: string;
+
+  /** Additional source-specific metadata */
+  extra?: Record<string, unknown>;
 }
 
-export interface TokenUsageInput {
-  token: string;
-  actionDetails?: Record<string, unknown>;
+/**
+ * Result of consuming an OTP.
+ */
+export interface OTPConsumeResult {
+  /** The actual OTP code */
+  code: string;
+
+  /** Full message content (if user allowed) */
+  fullMessage?: string;
+
+  /** Metadata about the OTP */
+  metadata: OTPMetadata;
 }
 
-export interface TokenUsageResult {
-  success: boolean;
-  usesRemaining: number;
-  reason?: string;
+/**
+ * Full OTP status response.
+ */
+export interface OTPStatus {
+  id: UUID;
+  status: OTPRequestStatus;
+  /** Encrypted OTP payload (only when status is 'otp_received') */
+  encryptedPayload?: string;
+  /** OTP metadata */
+  metadata?: OTPMetadata;
+  expiresAt: ISODateString;
+}
+
+// ============================================================================
+// Device Types
+// ============================================================================
+
+/**
+ * A registered user device for OTP capture.
+ */
+export interface UserDevice {
+  id: UUID;
+  userId: UUID;
+  deviceType: DeviceType;
+  deviceName: string | null;
+  pushToken: string | null;
+  isActive: boolean;
+  lastSeenAt: ISODateString | null;
+  createdAt: ISODateString;
+  updatedAt: ISODateString;
+}
+
+export interface RegisterDeviceInput {
+  deviceType: DeviceType;
+  deviceName?: string;
+  pushToken?: string;
+}
+
+// ============================================================================
+// Email Integration Types
+// ============================================================================
+
+/**
+ * An email integration for OTP capture.
+ */
+export interface EmailIntegration {
+  id: UUID;
+  userId: UUID;
+  integrationType: EmailIntegrationType;
+  emailAddress: string;
+  isActive: boolean;
+  lastSyncAt: ISODateString | null;
+  createdAt: ISODateString;
+  updatedAt: ISODateString;
+}
+
+export interface CreateEmailIntegrationInput {
+  integrationType: EmailIntegrationType;
+  emailAddress: string;
+  credentials: Record<string, string>; // OAuth tokens or IMAP creds
 }
 
 // ============================================================================
@@ -217,7 +282,7 @@ export interface AuditLog {
   id: UUID;
   userId: UUID | null;
   agentId: UUID | null;
-  permissionRequestId: UUID | null;
+  otpRequestId: UUID | null;
   eventType: AuditEventType;
   details: Record<string, unknown>;
   ipAddress: string | null;
@@ -228,7 +293,7 @@ export interface AuditLog {
 export interface AuditLogFilter {
   userId?: UUID;
   agentId?: UUID;
-  permissionRequestId?: UUID;
+  otpRequestId?: UUID;
   eventType?: AuditEventType;
   startDate?: ISODateString;
   endDate?: ISODateString;
@@ -272,13 +337,20 @@ export interface WsMessage {
   payload?: unknown;
 }
 
-export interface WsStatusChangeMessage extends WsMessage {
-  type: 'status_change';
+export interface WsOTPStatusChangeMessage extends WsMessage {
+  type: 'otp_status_change';
   payload: {
-    permissionId: UUID;
-    status: PermissionStatus;
-    token?: string;
+    otpRequestId: UUID;
+    status: OTPRequestStatus;
     reason?: string;
+  };
+}
+
+export interface WsOTPReceivedMessage extends WsMessage {
+  type: 'otp_received';
+  payload: {
+    otpRequestId: UUID;
+    metadata: OTPMetadata;
   };
 }
 
@@ -294,13 +366,11 @@ export interface WsErrorMessage extends WsMessage {
 // Telegram Types
 // ============================================================================
 
-export interface TelegramApprovalRequest {
-  permissionRequestId: UUID;
+export interface TelegramOTPApprovalRequest {
+  otpRequestId: UUID;
   agentName: string;
-  action: string;
-  resource?: string;
-  scope: Record<string, unknown>;
-  context: Record<string, unknown>;
+  reason: string;
+  expectedSender?: string;
   expiresAt: ISODateString;
 }
 
@@ -308,22 +378,51 @@ export interface TelegramApprovalRequest {
 // SDK Types
 // ============================================================================
 
+/**
+ * Configuration for the Agent OTP SDK client.
+ */
 export interface AgentOTPClientConfig {
+  /** API key for authentication (format: ak_xxx) */
   apiKey: string;
+
+  /** Base URL for the API (default: https://api.agentotp.com) */
   baseUrl?: string;
+
+  /** Request timeout in milliseconds (default: 30000) */
   timeout?: number;
+
+  /** Number of retry attempts for network errors (default: 3) */
   retryAttempts?: number;
+
+  /** Delay between retries in milliseconds (default: 1000) */
   retryDelay?: number;
 }
 
-export interface RequestPermissionOptions extends CreatePermissionRequestInput {
-  waitForApproval?: boolean;
+/**
+ * Options for requesting an OTP.
+ */
+export interface RequestOTPOptions extends CreateOTPRequestInput {
+  /** Wait for OTP to arrive before returning (default: false) */
+  waitForOTP?: boolean;
+
+  /** Timeout when waiting for OTP in ms (default: 120000) */
   timeout?: number;
-  onPendingApproval?: (info: PendingApprovalInfo) => void;
+
+  /** Callback when request is pending user approval */
+  onPendingApproval?: (info: OTPPendingInfo) => void;
+
+  /** Callback when OTP is received (before consumption) */
+  onOTPReceived?: (metadata: OTPMetadata) => void;
+
+  /** Polling interval in ms when waiting (default: 2000) */
+  pollingInterval?: number;
 }
 
-export interface PendingApprovalInfo {
-  permissionId: UUID;
+/**
+ * Info provided when OTP request is pending approval.
+ */
+export interface OTPPendingInfo {
+  otpRequestId: UUID;
   approvalUrl: string;
   webhookUrl: string;
   expiresAt: ISODateString;

@@ -1,245 +1,83 @@
 /**
- * Policy engine for evaluating permission requests against defined policies.
+ * Auto-approval rules engine for OTP requests.
+ *
+ * NOTE: The policy engine has been simplified for the OTP Relay pivot.
+ * Complex policy rules have been replaced with simple auto-approval rules
+ * based on trusted senders.
  */
 
-import type { DbClient, PolicyRow } from '../lib/db';
-import { getValue, deepMerge } from '../lib/utils';
-import {
-  POLICY_ACTION,
-  type PolicyAction,
-  type PolicyCondition,
-} from '@orrisai/agent-otp-shared';
+import type { DbClient } from '../lib/db';
 
-interface Policy {
+/**
+ * Decision for an OTP request.
+ */
+type ApprovalDecision = 'auto_approve' | 'require_approval' | 'deny';
+
+interface ApprovalRule {
   id: string;
   userId: string;
-  agentId: string | null;
   name: string;
-  priority: number;
-  conditions: Record<string, PolicyCondition>;
-  action: PolicyAction;
-  scopeTemplate: Record<string, unknown> | null;
+  senderPattern: string;
+  source?: string;
+  decision: ApprovalDecision;
   isActive: boolean;
 }
 
-interface PermissionRequestInput {
+interface OTPRequestInput {
   agentId: string;
-  action: string;
-  resource?: string;
-  scope: Record<string, unknown>;
-  context: Record<string, unknown>;
+  reason: string;
+  expectedSender?: string;
+  filter?: {
+    sources?: string[];
+    senderPattern?: string;
+  };
 }
 
-interface PolicyDecision {
-  policy?: Policy;
-  action: PolicyAction;
-  scope?: Record<string, unknown>;
+interface ApprovalResult {
+  rule?: ApprovalRule;
+  decision: ApprovalDecision;
   reason?: string;
 }
 
 /**
- * Policy engine for evaluating permission requests.
+ * Policy engine for evaluating OTP request auto-approval rules.
  */
 export class PolicyEngine {
   constructor(private db: DbClient) {}
 
   /**
-   * Evaluates a permission request against applicable policies.
+   * Evaluates an OTP request against auto-approval rules.
    * Returns the decision (auto_approve, require_approval, or deny).
    */
   async evaluate(
     userId: string,
-    request: PermissionRequestInput
-  ): Promise<PolicyDecision> {
-    // Fetch active policies for this user, ordered by priority
-    const { data: policiesData, error } = await this.db
-      .from('policies')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('is_active', true)
-      .order('priority', { ascending: false });
+    request: OTPRequestInput
+  ): Promise<ApprovalResult> {
+    // TODO: Implement auto-approval rules
+    // For now, always require manual approval for security
 
-    if (error) {
-      console.error('Failed to fetch policies:', error);
-      // Default to require_approval on error for safety
-      return {
-        action: POLICY_ACTION.REQUIRE_APPROVAL,
-        reason: 'Failed to evaluate policies',
-      };
-    }
-
-    const rawPolicies = policiesData as PolicyRow[] | null;
-    const policies: Policy[] = (rawPolicies ?? []).map((p) => ({
-      id: p.id,
-      userId: p.user_id,
-      agentId: p.agent_id,
-      name: p.name,
-      priority: p.priority,
-      conditions: p.conditions as Record<string, PolicyCondition>,
-      action: p.action as PolicyAction,
-      scopeTemplate: p.scope_template,
-      isActive: p.is_active,
-    }));
-
-    // Filter policies applicable to this agent
-    const applicablePolicies = policies.filter(
-      (p) => p.agentId === null || p.agentId === request.agentId
-    );
-
-    // Evaluate policies in priority order
-    for (const policy of applicablePolicies) {
-      if (this.matchesConditions(request, policy.conditions)) {
-        // Merge scope with template if provided
-        const finalScope = policy.scopeTemplate
-          ? deepMerge(request.scope, policy.scopeTemplate)
-          : request.scope;
-
-        return {
-          policy,
-          action: policy.action,
-          scope: finalScope,
-          reason: `Matched policy: ${policy.name}`,
-        };
-      }
-    }
-
-    // No matching policy - default to require_approval for safety
     return {
-      action: POLICY_ACTION.REQUIRE_APPROVAL,
-      reason: 'No matching policy found, defaulting to manual approval',
+      decision: 'require_approval',
+      reason: 'Default: manual approval required for all OTP requests',
     };
   }
 
   /**
-   * Checks if a request matches all conditions of a policy.
+   * Checks if a sender matches a pattern.
+   * Supports wildcards (*) for partial matching.
    */
-  private matchesConditions(
-    request: PermissionRequestInput,
-    conditions: Record<string, PolicyCondition>
-  ): boolean {
-    // Empty conditions means match all
-    if (Object.keys(conditions).length === 0) {
+  private matchesSenderPattern(sender: string, pattern: string): boolean {
+    if (pattern === '*') {
       return true;
     }
 
-    // Build a flat object with all request data for evaluation
-    const requestData = this.flattenRequest(request);
+    // Convert wildcard pattern to regex
+    const regexPattern = pattern
+      .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape special chars
+      .replace(/\*/g, '.*'); // Convert * to .*
 
-    for (const [path, condition] of Object.entries(conditions)) {
-      const value = getValue(requestData, path);
-      if (!this.evaluateCondition(value, condition)) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  /**
-   * Flattens the request into a single object for condition evaluation.
-   */
-  private flattenRequest(request: PermissionRequestInput): Record<string, unknown> {
-    return {
-      action: request.action,
-      resource: request.resource,
-      agentId: request.agentId,
-      scope: request.scope,
-      context: request.context,
-      // Spread scope and context at top level for easier access
-      ...Object.fromEntries(
-        Object.entries(request.scope).map(([k, v]) => [`scope.${k}`, v])
-      ),
-      ...Object.fromEntries(
-        Object.entries(request.context).map(([k, v]) => [`context.${k}`, v])
-      ),
-    };
-  }
-
-  /**
-   * Evaluates a single condition against a value.
-   */
-  private evaluateCondition(
-    value: unknown,
-    condition: PolicyCondition
-  ): boolean {
-    // equals
-    if (condition.equals !== undefined) {
-      if (value !== condition.equals) return false;
-    }
-
-    // notEquals
-    if (condition.notEquals !== undefined) {
-      if (value === condition.notEquals) return false;
-    }
-
-    // lessThan
-    if (condition.lessThan !== undefined) {
-      if (typeof value !== 'number' || value >= condition.lessThan) return false;
-    }
-
-    // greaterThan
-    if (condition.greaterThan !== undefined) {
-      if (typeof value !== 'number' || value <= condition.greaterThan) return false;
-    }
-
-    // lessThanOrEqual
-    if (condition.lessThanOrEqual !== undefined) {
-      if (typeof value !== 'number' || value > condition.lessThanOrEqual) return false;
-    }
-
-    // greaterThanOrEqual
-    if (condition.greaterThanOrEqual !== undefined) {
-      if (typeof value !== 'number' || value < condition.greaterThanOrEqual)
-        return false;
-    }
-
-    // startsWith
-    if (condition.startsWith !== undefined) {
-      if (typeof value !== 'string' || !value.startsWith(condition.startsWith))
-        return false;
-    }
-
-    // endsWith
-    if (condition.endsWith !== undefined) {
-      if (typeof value !== 'string' || !value.endsWith(condition.endsWith))
-        return false;
-    }
-
-    // contains
-    if (condition.contains !== undefined) {
-      if (typeof value !== 'string' || !value.includes(condition.contains))
-        return false;
-    }
-
-    // matches (regex)
-    if (condition.matches !== undefined) {
-      if (typeof value !== 'string') return false;
-      try {
-        const regex = new RegExp(condition.matches);
-        if (!regex.test(value)) return false;
-      } catch {
-        // Invalid regex, treat as no match
-        return false;
-      }
-    }
-
-    // in (array membership)
-    if (condition.in !== undefined) {
-      if (!condition.in.includes(value as string | number)) return false;
-    }
-
-    // notIn (array exclusion)
-    if (condition.notIn !== undefined) {
-      if (condition.notIn.includes(value as string | number)) return false;
-    }
-
-    // exists (check if value is defined)
-    if (condition.exists !== undefined) {
-      const valueExists = value !== undefined && value !== null;
-      if (condition.exists !== valueExists) return false;
-    }
-
-    return true;
+    const regex = new RegExp(`^${regexPattern}$`, 'i');
+    return regex.test(sender);
   }
 }
 

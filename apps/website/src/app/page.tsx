@@ -43,12 +43,12 @@ function HeroSection() {
             </Link>
           </div>
           <h1 className="text-4xl font-bold tracking-tight sm:text-6xl bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-            One-Time Permissions for AI Agents
+            Secure OTP Relay for AI Agents
           </h1>
           <p className="mt-6 text-lg leading-8 text-muted-foreground">
-            Secure your AI agents with scoped, ephemeral, and human-approved
-            access to sensitive operations. Simple SDK integration, powerful
-            policy engine, real-time approval workflow.
+            Help your AI agents receive verification codes securely.
+            End-to-end encrypted. User approved. Auto-deleted after use.
+            Never give your agent direct access to SMS or email again.
           </p>
           <div className="mt-10 flex items-center justify-center gap-x-6">
             <Button size="lg" asChild>
@@ -89,7 +89,7 @@ function HeroSection() {
                   d="M5 13l4 4L19 7"
                 />
               </svg>
-              MIT License
+              E2E Encrypted
             </div>
             <div className="flex items-center gap-2">
               <svg
@@ -105,7 +105,7 @@ function HeroSection() {
                   d="M5 13l4 4L19 7"
                 />
               </svg>
-              TypeScript &amp; Python SDKs
+              SMS &amp; Email
             </div>
             <div className="flex items-center gap-2">
               <svg
@@ -132,9 +132,9 @@ function HeroSection() {
 
 const features = [
   {
-    name: "Scoped Permissions",
+    name: "End-to-End Encrypted",
     description:
-      "Define granular scopes for each operation. Limit actions to specific resources, amounts, or patterns.",
+      "OTPs are encrypted on your device with the agent's public key. Only the authorized agent can decrypt them. Even we can't read your codes.",
     icon: (
       <svg
         className="h-6 w-6"
@@ -146,15 +146,15 @@ const features = [
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeWidth={2}
-          d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
         />
       </svg>
     ),
   },
   {
-    name: "Ephemeral Tokens",
+    name: "One-Time Read",
     description:
-      "Tokens expire automatically after use or timeout. No persistent credentials to manage or rotate.",
+      "OTP codes are automatically deleted after your agent reads them. No data retention, no persistent storage of sensitive codes.",
     icon: (
       <svg
         className="h-6 w-6"
@@ -172,9 +172,9 @@ const features = [
     ),
   },
   {
-    name: "Human-in-the-Loop",
+    name: "User Approval",
     description:
-      "Require approval for sensitive operations. Get notified via Telegram, email, or webhook.",
+      "You control which OTPs your agents can access. Approve each request in real-time via Telegram, email, or the dashboard.",
     icon: (
       <svg
         className="h-6 w-6"
@@ -192,9 +192,9 @@ const features = [
     ),
   },
   {
-    name: "Policy Engine",
+    name: "Multi-Source Capture",
     description:
-      "Configure rules to auto-approve safe operations or require human review for risky ones.",
+      "Capture OTPs from SMS (Android app), Email (Gmail/IMAP), and more. One unified API for all verification codes.",
     icon: (
       <svg
         className="h-6 w-6"
@@ -206,13 +206,7 @@ const features = [
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeWidth={2}
-          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-        />
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+          d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
         />
       </svg>
     ),
@@ -220,7 +214,7 @@ const features = [
   {
     name: "Full Audit Trail",
     description:
-      "Every permission request, approval, and usage is logged. Export logs for compliance.",
+      "Every OTP request and access is logged. See exactly what your agents accessed and when. Export logs for compliance.",
     icon: (
       <svg
         className="h-6 w-6"
@@ -240,7 +234,7 @@ const features = [
   {
     name: "Framework Agnostic",
     description:
-      "Works with LangChain, CrewAI, AutoGen, or any custom agent. TypeScript and Python SDKs.",
+      "Works with LangChain, CrewAI, AutoGen, or any custom agent. TypeScript and Python SDKs available.",
     icon: (
       <svg
         className="h-6 w-6"
@@ -268,11 +262,11 @@ function FeaturesSection() {
             Security First
           </h2>
           <p className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-            Everything you need to secure AI agents
+            OTP relay designed for AI agents
           </p>
           <p className="mt-6 text-lg leading-8 text-muted-foreground">
-            Built for the era of autonomous AI agents. Give your agents exactly
-            the permissions they need, exactly when they need them.
+            Your agents need verification codes. You need security and control.
+            Agent OTP bridges the gap with end-to-end encryption and user approval.
           </p>
         </div>
         <div className="mx-auto mt-16 max-w-2xl sm:mt-20 lg:mt-24 lg:max-w-none">
@@ -300,26 +294,26 @@ function FeaturesSection() {
 const steps = [
   {
     step: "01",
-    title: "Install the SDK",
-    description: "Add the Agent OTP SDK to your project with npm, bun, or pip.",
+    title: "Install the App",
+    description: "Download Agent OTP on your Android phone or connect your email account for OTP capture.",
   },
   {
     step: "02",
-    title: "Request Permission",
+    title: "Agent Requests OTP",
     description:
-      "When your agent needs to perform a sensitive operation, request a one-time permission.",
+      "When your agent needs a verification code, it requests access through the SDK with the reason.",
   },
   {
     step: "03",
-    title: "Approve or Auto-Approve",
+    title: "You Approve",
     description:
-      "Based on your policies, the request is auto-approved or sent for human review.",
+      "Get notified via Telegram or email. Approve which OTP to share with your agent.",
   },
   {
     step: "04",
-    title: "Use the Token",
+    title: "Agent Gets Code",
     description:
-      "Execute the operation with the scoped, ephemeral token. It expires after use.",
+      "The encrypted OTP is securely delivered to your agent. Deleted after reading.",
   },
 ];
 
@@ -365,27 +359,35 @@ function HowItWorksSection() {
 }
 
 function CodeExampleSection() {
-  const codeExample = `import { AgentOTP } from '@anthropic/agent-otp';
+  const codeExample = `import {
+  AgentOTPClient,
+  generateKeyPair,
+  exportPublicKey
+} from '@orrisai/agent-otp-sdk';
 
-const otp = new AgentOTP();
-
-// Request permission for a sensitive operation
-const permission = await otp.requestPermission({
-  action: 'gmail.send',
-  resource: 'email:client@example.com',
-  scope: {
-    max_emails: 1,
-    subject_pattern: '^Invoice.*',
-  },
-  context: {
-    reason: 'Sending monthly invoice',
-  },
-  waitForApproval: true, // Blocks until approved
+const client = new AgentOTPClient({
+  apiKey: process.env.AGENT_OTP_API_KEY!,
 });
 
-if (permission.status === 'approved') {
-  // Use the one-time token
-  await sendEmail({ otpToken: permission.token });
+// Generate encryption keys (store private key securely)
+const { publicKey, privateKey } = await generateKeyPair();
+
+// Request an OTP
+const request = await client.requestOTP({
+  reason: 'Sign up verification for Acme Inc',
+  expectedSender: 'Acme',
+  filter: {
+    sources: ['email'],
+    senderPattern: '*@acme.com',
+  },
+  publicKey: await exportPublicKey(publicKey),
+  waitForOTP: true,
+});
+
+// Consume the OTP (one-time read, then deleted)
+if (request.status === 'otp_received') {
+  const { code } = await client.consumeOTP(request.id, privateKey);
+  await completeSignup(code);
 }`;
 
   return (
@@ -400,8 +402,8 @@ if (permission.status === 'approved') {
               Clean, intuitive API
             </p>
             <p className="mt-6 text-lg leading-8 text-muted-foreground">
-              Our SDK is designed to be simple and predictable. Request
-              permissions, wait for approval, use the token. That&apos;s it.
+              Our SDK handles encryption, polling, and error handling.
+              Request an OTP, wait for it, decrypt and use it. Simple.
             </p>
             <dl className="mt-10 max-w-xl space-y-6 text-base leading-7 text-muted-foreground lg:max-w-none">
               <div className="flex gap-x-4">
@@ -421,7 +423,7 @@ if (permission.status === 'approved') {
                     />
                   </svg>
                 </dt>
-                <dd>Full TypeScript support with complete type definitions</dd>
+                <dd>Built-in E2E encryption with Web Crypto API</dd>
               </div>
               <div className="flex gap-x-4">
                 <dt className="flex-none">
@@ -439,7 +441,7 @@ if (permission.status === 'approved') {
                     />
                   </svg>
                 </dt>
-                <dd>Async/await with built-in timeout handling</dd>
+                <dd>Async/await with built-in polling and timeout handling</dd>
               </div>
               <div className="flex gap-x-4">
                 <dt className="flex-none">
@@ -457,7 +459,7 @@ if (permission.status === 'approved') {
                     />
                   </svg>
                 </dt>
-                <dd>Detailed error messages with actionable suggestions</dd>
+                <dd>Detailed error classes for every failure mode</dd>
               </div>
             </dl>
             <div className="mt-10">
@@ -474,7 +476,7 @@ if (permission.status === 'approved') {
               <div className="h-3 w-3 rounded-full bg-yellow-500" />
               <div className="h-3 w-3 rounded-full bg-green-500" />
               <span className="ml-2 text-sm text-muted-foreground">
-                example.ts
+                agent.ts
               </span>
             </div>
             <pre className="p-4 overflow-x-auto text-sm">

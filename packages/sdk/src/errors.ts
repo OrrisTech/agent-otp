@@ -1,9 +1,13 @@
 /**
- * Error classes for the Agent OTP SDK.
+ * Error classes for the Agent OTP Relay SDK.
+ *
+ * Agent OTP is a secure OTP relay service that helps AI agents
+ * receive verification codes (SMS/email) with user approval
+ * and end-to-end encryption.
  */
 
 /**
- * Base error class for Agent OTP SDK errors.
+ * Base error class for all Agent OTP errors.
  */
 export class AgentOTPError extends Error {
   constructor(
@@ -17,43 +21,20 @@ export class AgentOTPError extends Error {
 }
 
 /**
- * Error thrown when authentication fails.
+ * Error thrown when API key is invalid or missing.
  */
 export class AuthenticationError extends AgentOTPError {
-  constructor(message = 'Authentication failed') {
+  constructor(message = 'Invalid or missing API key') {
     super(message, 'AUTHENTICATION_ERROR');
     this.name = 'AuthenticationError';
   }
 }
 
 /**
- * Error thrown when access is forbidden.
- */
-export class ForbiddenError extends AgentOTPError {
-  constructor(message = 'Access denied') {
-    super(message, 'FORBIDDEN');
-    this.name = 'ForbiddenError';
-  }
-}
-
-/**
- * Error thrown when a resource is not found.
- */
-export class NotFoundError extends AgentOTPError {
-  constructor(message = 'Resource not found') {
-    super(message, 'NOT_FOUND');
-    this.name = 'NotFoundError';
-  }
-}
-
-/**
- * Error thrown when validation fails.
+ * Error thrown for validation failures.
  */
 export class ValidationError extends AgentOTPError {
-  constructor(
-    message = 'Validation failed',
-    details?: Record<string, unknown>
-  ) {
+  constructor(message = 'Validation error', details?: Record<string, unknown>) {
     super(message, 'VALIDATION_ERROR', details);
     this.name = 'ValidationError';
   }
@@ -67,51 +48,18 @@ export class RateLimitError extends AgentOTPError {
     message = 'Rate limit exceeded',
     public readonly retryAfter?: number
   ) {
-    super(message, 'RATE_LIMITED', { retryAfter });
+    super(message, 'RATE_LIMIT_ERROR', { retryAfter });
     this.name = 'RateLimitError';
   }
 }
 
 /**
- * Error thrown when a permission request times out.
+ * Error thrown when a request times out.
  */
 export class TimeoutError extends AgentOTPError {
   constructor(message = 'Request timed out') {
-    super(message, 'TIMEOUT');
+    super(message, 'TIMEOUT_ERROR');
     this.name = 'TimeoutError';
-  }
-}
-
-/**
- * Error thrown when a permission is denied.
- */
-export class PermissionDeniedError extends AgentOTPError {
-  constructor(
-    message = 'Permission denied',
-    public readonly reason?: string
-  ) {
-    super(message, 'PERMISSION_DENIED', { reason });
-    this.name = 'PermissionDeniedError';
-  }
-}
-
-/**
- * Error thrown when a permission request expires.
- */
-export class PermissionExpiredError extends AgentOTPError {
-  constructor(message = 'Permission request expired') {
-    super(message, 'PERMISSION_EXPIRED');
-    this.name = 'PermissionExpiredError';
-  }
-}
-
-/**
- * Error thrown when a token is invalid or consumed.
- */
-export class InvalidTokenError extends AgentOTPError {
-  constructor(message = 'Invalid or consumed token') {
-    super(message, 'INVALID_TOKEN');
-    this.name = 'InvalidTokenError';
   }
 }
 
@@ -139,29 +87,76 @@ export class ServerError extends AgentOTPError {
   }
 }
 
+// ============================================================================
+// OTP-Specific Errors
+// ============================================================================
+
 /**
- * Error thrown when a token has already been used.
+ * Error thrown when no matching OTP is found.
  */
-export class TokenUsedError extends AgentOTPError {
-  constructor(
-    message = 'Token has already been used',
-    public readonly usedAt?: string
-  ) {
-    super(message, 'TOKEN_USED', { usedAt });
-    this.name = 'TokenUsedError';
+export class OTPNotFoundError extends AgentOTPError {
+  constructor(message = 'No matching OTP found') {
+    super(message, 'OTP_NOT_FOUND');
+    this.name = 'OTPNotFoundError';
   }
 }
 
 /**
- * Error thrown when a token has been revoked.
+ * Error thrown when an OTP request has expired.
  */
-export class TokenRevokedError extends AgentOTPError {
+export class OTPExpiredError extends AgentOTPError {
   constructor(
-    message = 'Token has been revoked',
-    public readonly revokedBy?: string
+    message = 'OTP request has expired',
+    public readonly expiredAt?: string
   ) {
-    super(message, 'TOKEN_REVOKED', { revokedBy });
-    this.name = 'TokenRevokedError';
+    super(message, 'OTP_EXPIRED', { expiredAt });
+    this.name = 'OTPExpiredError';
+  }
+}
+
+/**
+ * Error thrown when an OTP has already been consumed.
+ */
+export class OTPAlreadyConsumedError extends AgentOTPError {
+  constructor(
+    message = 'OTP has already been consumed',
+    public readonly consumedAt?: string
+  ) {
+    super(message, 'OTP_ALREADY_CONSUMED', { consumedAt });
+    this.name = 'OTPAlreadyConsumedError';
+  }
+}
+
+/**
+ * Error thrown when user denies OTP access.
+ */
+export class OTPApprovalDeniedError extends AgentOTPError {
+  constructor(
+    message = 'User denied OTP access',
+    public readonly reason?: string
+  ) {
+    super(message, 'OTP_APPROVAL_DENIED', { reason });
+    this.name = 'OTPApprovalDeniedError';
+  }
+}
+
+/**
+ * Error thrown when OTP request is cancelled.
+ */
+export class OTPCancelledError extends AgentOTPError {
+  constructor(message = 'OTP request was cancelled') {
+    super(message, 'OTP_CANCELLED');
+    this.name = 'OTPCancelledError';
+  }
+}
+
+/**
+ * Error thrown when decryption fails.
+ */
+export class DecryptionError extends AgentOTPError {
+  constructor(message = 'Failed to decrypt OTP payload') {
+    super(message, 'DECRYPTION_ERROR');
+    this.name = 'DecryptionError';
   }
 }
 
@@ -176,10 +171,6 @@ export function errorFromStatus(
   switch (status) {
     case 401:
       return new AuthenticationError(message);
-    case 403:
-      return new ForbiddenError(message);
-    case 404:
-      return new NotFoundError(message);
     case 422:
       return new ValidationError(message, details);
     case 429:
@@ -187,7 +178,11 @@ export function errorFromStatus(
     default:
       // Handle 5xx server errors
       if (status >= 500 && status < 600) {
-        return new ServerError(message, status, details?.requestId as string | undefined);
+        return new ServerError(
+          message,
+          status,
+          details?.requestId as string | undefined
+        );
       }
       return new AgentOTPError(message, 'API_ERROR', { status, details });
   }

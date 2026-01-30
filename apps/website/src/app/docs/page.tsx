@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 
 export const metadata: Metadata = {
   title: 'Documentation',
-  description: 'Learn how to integrate Agent OTP into your AI agent applications for secure, scoped, and human-approved permissions.',
+  description: 'Learn how to integrate Agent OTP into your AI agent applications for secure OTP relay with end-to-end encryption.',
 };
 
 export default function DocsPage() {
@@ -13,38 +13,38 @@ export default function DocsPage() {
       <h1>Introduction to Agent OTP</h1>
 
       <p className="lead text-xl text-muted-foreground">
-        Agent OTP is a lightweight service that provides one-time, scoped permissions
-        for AI agents. It enables human-in-the-loop approval workflows for sensitive
-        operations while allowing safe operations to be auto-approved.
+        Agent OTP is a secure relay service that helps AI agents receive verification
+        codes (SMS/email OTPs) with end-to-end encryption, user approval, and
+        automatic deletion after use.
       </p>
 
       <h2>Why Agent OTP?</h2>
 
       <p>
-        As AI agents become more autonomous and capable, they need access to sensitive
-        resources like email, databases, financial systems, and more. Traditional
-        authentication methods (API keys, OAuth tokens) grant broad, persistent access
-        that doesn&apos;t match the ephemeral, scoped nature of agent operations.
+        AI agents often need to complete tasks that require verification codes -
+        signing up for services, logging into accounts, or verifying identity.
+        However, giving agents direct access to your SMS or email creates security
+        risks. Agent OTP solves this by acting as a secure relay.
       </p>
 
-      <p>Agent OTP solves this by providing:</p>
+      <p>Agent OTP provides:</p>
 
       <ul>
         <li>
-          <strong>Scoped permissions</strong> - Define exactly what an agent can do
-          with each request
+          <strong>End-to-End Encryption</strong> - OTPs are encrypted on capture;
+          only your agent can decrypt them using its private key
         </li>
         <li>
-          <strong>Ephemeral tokens</strong> - Tokens expire after use or timeout,
-          eliminating persistent credential risks
+          <strong>User Approval</strong> - You control which OTPs agents can access,
+          approving each request individually
         </li>
         <li>
-          <strong>Human-in-the-loop</strong> - Configure policies to require human
-          approval for sensitive operations
+          <strong>One-Time Read</strong> - OTPs are automatically deleted after
+          consumption, eliminating persistent data risks
         </li>
         <li>
-          <strong>Full audit trail</strong> - Every request, approval, and usage
-          is logged for compliance
+          <strong>Full Audit Trail</strong> - Every OTP request and access is
+          logged for compliance and transparency
         </li>
       </ul>
 
@@ -58,34 +58,34 @@ export default function DocsPage() {
             </div>
             <h3 className="font-semibold mb-1">Request</h3>
             <p className="text-sm text-muted-foreground">
-              Agent requests permission for a specific action
+              Agent requests an OTP with its public encryption key
             </p>
           </div>
           <div className="flex flex-col items-center text-center">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold mb-3">
               2
             </div>
-            <h3 className="font-semibold mb-1">Evaluate</h3>
+            <h3 className="font-semibold mb-1">Approve</h3>
             <p className="text-sm text-muted-foreground">
-              Policy engine determines if approval is needed
+              User reviews and approves the OTP request
             </p>
           </div>
           <div className="flex flex-col items-center text-center">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold mb-3">
               3
             </div>
-            <h3 className="font-semibold mb-1">Approve</h3>
+            <h3 className="font-semibold mb-1">Capture</h3>
             <p className="text-sm text-muted-foreground">
-              Auto-approve or send to human for review
+              OTP is captured (SMS/email) and encrypted
             </p>
           </div>
           <div className="flex flex-col items-center text-center">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold mb-3">
               4
             </div>
-            <h3 className="font-semibold mb-1">Execute</h3>
+            <h3 className="font-semibold mb-1">Consume</h3>
             <p className="text-sm text-muted-foreground">
-              Agent uses one-time token to perform action
+              Agent decrypts and uses OTP; it&apos;s then deleted
             </p>
           </div>
         </div>
@@ -94,31 +94,36 @@ export default function DocsPage() {
       <h2>Quick example</h2>
 
       <pre className="language-typescript">
-        <code>{`import { AgentOTPClient } from '@orrisai/agent-otp-sdk';
+        <code>{`import {
+  AgentOTPClient,
+  generateKeyPair,
+  exportPublicKey
+} from '@orrisai/agent-otp-sdk';
 
-const otp = new AgentOTPClient({
-  apiKey: process.env.AGENT_OTP_KEY,
+const client = new AgentOTPClient({
+  apiKey: process.env.AGENT_OTP_API_KEY,
 });
 
-// Request permission to send an email
-const permission = await otp.requestPermission({
-  action: 'gmail.send',
-  resource: 'email:client@example.com',
-  scope: {
-    max_emails: 1,
+// Generate encryption keys (store private key securely)
+const { publicKey, privateKey } = await generateKeyPair();
+
+// Request an OTP
+const request = await client.requestOTP({
+  reason: 'Sign up for Acme service',
+  expectedSender: 'Acme',
+  filter: {
+    sources: ['email'],
+    senderPattern: '*@acme.com',
   },
-  context: {
-    reason: 'Sending invoice to client',
-  },
-  waitForApproval: true,
+  publicKey: await exportPublicKey(publicKey),
+  waitForOTP: true,
+  timeout: 120000,
 });
 
-if (permission.status === 'approved') {
-  // Token is scoped to exactly this operation
-  await sendEmail({
-    to: 'client@example.com',
-    otpToken: permission.token,
-  });
+// Consume the OTP (decrypts and deletes from server)
+if (request.status === 'otp_received') {
+  const { code, metadata } = await client.consumeOTP(request.id, privateKey);
+  console.log('OTP code:', code);
 }`}</code>
       </pre>
 
@@ -126,31 +131,29 @@ if (permission.status === 'approved') {
 
       <div className="not-prose my-8 grid gap-4 sm:grid-cols-2">
         <div className="rounded-lg border border-border p-4">
-          <h3 className="font-semibold mb-2">Policy Engine</h3>
+          <h3 className="font-semibold mb-2">E2E Encryption</h3>
           <p className="text-sm text-muted-foreground">
-            Define rules to auto-approve safe operations and require human
-            review for risky ones.
+            OTPs are encrypted with your agent&apos;s public key. The relay
+            service never sees the plaintext code.
           </p>
         </div>
         <div className="rounded-lg border border-border p-4">
-          <h3 className="font-semibold mb-2">Multi-channel Notifications</h3>
+          <h3 className="font-semibold mb-2">Multi-Source Capture</h3>
           <p className="text-sm text-muted-foreground">
-            Get approval requests via Telegram, email, webhooks, or the web
-            dashboard.
+            Capture OTPs from SMS (Android app) or email (Gmail/IMAP integration).
           </p>
         </div>
         <div className="rounded-lg border border-border p-4">
           <h3 className="font-semibold mb-2">Framework Agnostic</h3>
           <p className="text-sm text-muted-foreground">
-            Works with LangChain, CrewAI, AutoGen, or any custom agent
-            framework.
+            Works with LangChain, CrewAI, AutoGen, or any custom agent framework.
           </p>
         </div>
         <div className="rounded-lg border border-border p-4">
-          <h3 className="font-semibold mb-2">Audit & Compliance</h3>
+          <h3 className="font-semibold mb-2">Self-Hostable</h3>
           <p className="text-sm text-muted-foreground">
-            Full audit trail of all permissions, approvals, and usage for
-            compliance needs.
+            Open source and fully self-hostable. Run on your own infrastructure
+            for complete control.
           </p>
         </div>
       </div>
@@ -167,8 +170,8 @@ if (permission.status === 'approved') {
           </Link>
         </Button>
         <Button variant="outline" asChild>
-          <Link href="/docs/concepts/permissions">
-            Learn Core Concepts
+          <Link href="/docs/concepts/how-it-works">
+            Learn How It Works
           </Link>
         </Button>
       </div>

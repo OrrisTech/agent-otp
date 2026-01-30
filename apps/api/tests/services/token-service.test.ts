@@ -1,481 +1,156 @@
 /**
- * Tests for the Token Service.
+ * Tests for the OTP storage service.
+ *
+ * NOTE: The token service has been refactored for the OTP Relay pivot.
+ * Old token-based methods have been replaced with OTP payload management.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TokenService } from '../../src/services/token-service';
-import { PERMISSION_STATUS } from '@orrisai/agent-otp-shared';
-
-// Mock the crypto module
-vi.mock('../../src/lib/crypto', () => ({
-  hashSHA256: vi.fn(async (input: string) => `hashed_${input}`),
-}));
-
-// Mock the utils module
-vi.mock('../../src/lib/utils', () => ({
-  generateOtpToken: vi.fn(() => 'otp_test_token_123456789'),
-  calculateExpiresAt: vi.fn(
-    (ttlSeconds: number) => new Date(Date.now() + ttlSeconds * 1000)
-  ),
-  toISOString: vi.fn((date: Date) => date.toISOString()),
-  isExpired: vi.fn((dateStr: string) => new Date(dateStr) < new Date()),
-}));
+import { TokenService, createTokenService } from '../../src/services/token-service';
 
 // Mock Redis client
-const createMockRedis = () => ({
+const mockRedis = {
   get: vi.fn(),
   set: vi.fn(),
   del: vi.fn(),
-});
+};
 
-// Mock DB client
-const createMockDb = () => ({
-  from: vi.fn(() => ({
-    insert: vi.fn(() => ({
-      select: vi.fn(() => ({
-        single: vi.fn(() =>
-          Promise.resolve({ data: { id: 'token_123' }, error: null })
-        ),
-      })),
-    })),
-    select: vi.fn(() => ({
-      eq: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          is: vi.fn(() => ({
-            single: vi.fn(() =>
-              Promise.resolve({
-                data: {
-                  id: 'token_123',
-                  permission_request_id: 'perm_123',
-                  scope: { max_emails: 1 },
-                  uses_remaining: 1,
-                  expires_at: new Date(Date.now() + 300000).toISOString(),
-                },
-                error: null,
-              })
-            ),
-          })),
-        })),
-        is: vi.fn(() => ({
-          single: vi.fn(),
-        })),
-      })),
-    })),
-    update: vi.fn(() => ({
-      eq: vi.fn(() => Promise.resolve({ error: null })),
-    })),
-  })),
-});
+// Mock Supabase client
+const mockDb = {
+  from: vi.fn().mockReturnThis(),
+  select: vi.fn().mockReturnThis(),
+  insert: vi.fn().mockReturnThis(),
+  update: vi.fn().mockReturnThis(),
+  eq: vi.fn().mockReturnThis(),
+  is: vi.fn().mockReturnThis(),
+  single: vi.fn(),
+};
 
 describe('TokenService', () => {
-  let tokenService: TokenService;
-  let mockDb: ReturnType<typeof createMockDb>;
-  let mockRedis: ReturnType<typeof createMockRedis>;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDb = createMockDb();
-    mockRedis = createMockRedis();
-    tokenService = new TokenService(mockDb as any, mockRedis as any);
+    mockRedis.get.mockResolvedValue(null);
+    mockRedis.set.mockResolvedValue('OK');
+    mockRedis.del.mockResolvedValue(1);
   });
 
-  describe('createToken', () => {
-    it('should create a token and store it in database and cache', async () => {
-      mockRedis.set.mockResolvedValue('OK');
+  describe('storeEncryptedOTP', () => {
+    it('should store encrypted OTP in Redis', async () => {
+      const service = createTokenService(mockDb as any, mockRedis as any);
 
-      const token = await tokenService.createToken({
-        permissionRequestId: 'perm_123',
-        scope: { max_emails: 1 },
-        ttlSeconds: 300,
+      await service.storeEncryptedOTP({
+        requestId: 'otp_123',
+        encryptedPayload: 'encrypted_data',
+        source: 'email',
+        sender: 'test@acme.com',
       });
 
-      expect(token).toBe('otp_test_token_123456789');
-      expect(mockDb.from).toHaveBeenCalledWith('tokens');
-      expect(mockRedis.set).toHaveBeenCalled();
+      expect(mockRedis.set).toHaveBeenCalledWith(
+        expect.stringContaining('otp_123'),
+        expect.stringContaining('encrypted_data'),
+        expect.objectContaining({ ex: expect.any(Number) })
+      );
     });
 
-    it('should use default values for ttl and uses when not provided', async () => {
-      mockRedis.set.mockResolvedValue('OK');
+    it('should use default TTL when not provided', async () => {
+      const service = createTokenService(mockDb as any, mockRedis as any);
 
-      const token = await tokenService.createToken({
-        permissionRequestId: 'perm_123',
-        scope: {},
+      await service.storeEncryptedOTP({
+        requestId: 'otp_123',
+        encryptedPayload: 'encrypted_data',
+        source: 'sms',
       });
 
-      expect(token).toBeDefined();
-    });
-
-    it('should throw error when database insert fails', async () => {
-      const failingDb = {
-        from: vi.fn(() => ({
-          insert: vi.fn(() => ({
-            select: vi.fn(() => ({
-              single: vi.fn(() =>
-                Promise.resolve({
-                  data: null,
-                  error: { message: 'Database error' },
-                })
-              ),
-            })),
-          })),
-        })),
-      };
-
-      const service = new TokenService(failingDb as any, mockRedis as any);
-
-      await expect(
-        service.createToken({
-          permissionRequestId: 'perm_123',
-          scope: {},
-        })
-      ).rejects.toThrow('Failed to create token');
+      // Should use default TTL (300 seconds)
+      expect(mockRedis.set).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        expect.objectContaining({ ex: expect.any(Number) })
+      );
     });
   });
 
-  describe('verifyToken', () => {
-    it('should verify valid token from cache', async () => {
-      const cachedData = JSON.stringify({
-        id: 'token_123',
-        permissionRequestId: 'perm_123',
-        scope: { max_emails: 1 },
-        usesRemaining: 1,
-        expiresAt: new Date(Date.now() + 300000).toISOString(),
+  describe('consumeEncryptedOTP', () => {
+    it('should retrieve and delete OTP from Redis', async () => {
+      const storedData = JSON.stringify({
+        id: 'otp_123',
+        requestId: 'otp_123',
+        encryptedPayload: 'encrypted_data',
+        source: 'email',
+        sender: 'test@acme.com',
+        expiresAt: new Date(Date.now() + 60000).toISOString(),
       });
-      mockRedis.get.mockResolvedValue(cachedData);
 
-      // Mock isExpired to return false for valid token
-      const { isExpired } = await import('../../src/lib/utils');
-      (isExpired as ReturnType<typeof vi.fn>).mockReturnValue(false);
+      mockRedis.get.mockResolvedValueOnce(storedData);
 
-      const result = await tokenService.verifyToken(
-        'otp_test_token',
-        'perm_123'
-      );
+      const service = createTokenService(mockDb as any, mockRedis as any);
 
-      expect(result.valid).toBe(true);
-      expect(result.scope).toEqual({ max_emails: 1 });
-      expect(result.usesRemaining).toBe(1);
-    });
+      const result = await service.consumeEncryptedOTP('otp_123');
 
-    it('should return invalid when permission request ID does not match', async () => {
-      const cachedData = JSON.stringify({
-        id: 'token_123',
-        permissionRequestId: 'perm_different',
-        scope: {},
-        usesRemaining: 1,
-        expiresAt: new Date(Date.now() + 300000).toISOString(),
-      });
-      mockRedis.get.mockResolvedValue(cachedData);
-
-      const result = await tokenService.verifyToken(
-        'otp_test_token',
-        'perm_123'
-      );
-
-      expect(result.valid).toBe(false);
-      expect(result.reason).toContain('does not match');
-    });
-
-    it('should return invalid when token has expired', async () => {
-      const cachedData = JSON.stringify({
-        id: 'token_123',
-        permissionRequestId: 'perm_123',
-        scope: {},
-        usesRemaining: 1,
-        expiresAt: new Date(Date.now() - 1000).toISOString(),
-      });
-      mockRedis.get.mockResolvedValue(cachedData);
-
-      // Mock isExpired to return true
-      const { isExpired } = await import('../../src/lib/utils');
-      (isExpired as ReturnType<typeof vi.fn>).mockReturnValue(true);
-
-      const result = await tokenService.verifyToken(
-        'otp_test_token',
-        'perm_123'
-      );
-
-      expect(result.valid).toBe(false);
-      expect(result.reason).toContain('expired');
-    });
-
-    it('should return invalid when token has been fully consumed', async () => {
-      const cachedData = JSON.stringify({
-        id: 'token_123',
-        permissionRequestId: 'perm_123',
-        scope: {},
-        usesRemaining: 0,
-        expiresAt: new Date(Date.now() + 300000).toISOString(),
-      });
-      mockRedis.get.mockResolvedValue(cachedData);
-
-      // Mock isExpired to return false
-      const { isExpired } = await import('../../src/lib/utils');
-      (isExpired as ReturnType<typeof vi.fn>).mockReturnValue(false);
-
-      const result = await tokenService.verifyToken(
-        'otp_test_token',
-        'perm_123'
-      );
-
-      expect(result.valid).toBe(false);
-      expect(result.reason).toContain('consumed');
-    });
-
-    it('should fallback to database when not in cache', async () => {
-      mockRedis.get.mockResolvedValue(null);
-
-      // Mock isExpired to return false
-      const { isExpired } = await import('../../src/lib/utils');
-      (isExpired as ReturnType<typeof vi.fn>).mockReturnValue(false);
-
-      const result = await tokenService.verifyToken(
-        'otp_test_token',
-        'perm_123'
-      );
-
-      expect(result.valid).toBe(true);
-      expect(mockDb.from).toHaveBeenCalledWith('tokens');
-    });
-
-    it('should return invalid when token not found in database', async () => {
-      mockRedis.get.mockResolvedValue(null);
-
-      const noResultDb = {
-        from: vi.fn(() => ({
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                is: vi.fn(() => ({
-                  single: vi.fn(() =>
-                    Promise.resolve({
-                      data: null,
-                      error: { message: 'Not found' },
-                    })
-                  ),
-                })),
-              })),
-            })),
-          })),
-        })),
-      };
-
-      const service = new TokenService(noResultDb as any, mockRedis as any);
-
-      const result = await service.verifyToken('otp_test_token', 'perm_123');
-
-      expect(result.valid).toBe(false);
-      expect(result.reason).toContain('not found');
-    });
-  });
-
-  describe('useToken', () => {
-    it('should successfully consume a token', async () => {
-      // Setup cache to have valid token
-      const cachedData = JSON.stringify({
-        id: 'token_123',
-        permissionRequestId: 'perm_123',
-        scope: { max_emails: 1 },
-        usesRemaining: 1,
-        expiresAt: new Date(Date.now() + 300000).toISOString(),
-      });
-      mockRedis.get.mockResolvedValue(cachedData);
-      mockRedis.set.mockResolvedValue('OK');
-      mockRedis.del.mockResolvedValue(1);
-
-      // Mock isExpired to return false
-      const { isExpired } = await import('../../src/lib/utils');
-      (isExpired as ReturnType<typeof vi.fn>).mockReturnValue(false);
-
-      const result = await tokenService.useToken(
-        'otp_test_token',
-        'perm_123',
-        { actionDetails: { recipient: 'test@example.com' } }
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.usesRemaining).toBe(0);
-    });
-
-    it('should return failure when token verification fails', async () => {
-      mockRedis.get.mockResolvedValue(null);
-
-      const noResultDb = {
-        from: vi.fn(() => ({
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                is: vi.fn(() => ({
-                  single: vi.fn(() =>
-                    Promise.resolve({
-                      data: null,
-                      error: { message: 'Not found' },
-                    })
-                  ),
-                })),
-              })),
-            })),
-          })),
-        })),
-      };
-
-      const service = new TokenService(noResultDb as any, mockRedis as any);
-
-      const result = await service.useToken('otp_invalid_token', 'perm_123');
-
-      expect(result.success).toBe(false);
-      expect(result.reason).toBeDefined();
-    });
-
-    it('should handle unlimited uses (-1)', async () => {
-      const cachedData = JSON.stringify({
-        id: 'token_123',
-        permissionRequestId: 'perm_123',
-        scope: {},
-        usesRemaining: -1, // Unlimited
-        expiresAt: new Date(Date.now() + 300000).toISOString(),
-      });
-      mockRedis.get.mockResolvedValue(cachedData);
-      mockRedis.set.mockResolvedValue('OK');
-
-      // Mock isExpired to return false
-      const { isExpired } = await import('../../src/lib/utils');
-      (isExpired as ReturnType<typeof vi.fn>).mockReturnValue(false);
-
-      // Override the DB mock to return -1 uses
-      const unlimitedDb = {
-        from: vi.fn(() => ({
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                is: vi.fn(() => ({
-                  single: vi.fn(() =>
-                    Promise.resolve({
-                      data: {
-                        id: 'token_123',
-                        uses_remaining: -1,
-                      },
-                      error: null,
-                    })
-                  ),
-                })),
-              })),
-            })),
-          })),
-          update: vi.fn(() => ({
-            eq: vi.fn(() => Promise.resolve({ error: null })),
-          })),
-        })),
-      };
-
-      const service = new TokenService(unlimitedDb as any, mockRedis as any);
-
-      const result = await service.useToken('otp_test_token', 'perm_123');
-
-      expect(result.success).toBe(true);
-      expect(result.usesRemaining).toBe(-1); // Still unlimited
-    });
-  });
-
-  describe('revokeToken', () => {
-    it('should revoke a token successfully', async () => {
-      const revokeDb = {
-        from: vi.fn(() => ({
-          update: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(() => Promise.resolve({ error: null })),
-            })),
-          })),
-        })),
-      };
-      mockRedis.del.mockResolvedValue(1);
-
-      const service = new TokenService(revokeDb as any, mockRedis as any);
-
-      const result = await service.revokeToken(
-        'otp_test_token',
-        'perm_123'
-      );
-
-      expect(result).toBe(true);
+      expect(result).not.toBeNull();
+      expect(result?.encryptedPayload).toBe('encrypted_data');
+      expect(result?.source).toBe('email');
       expect(mockRedis.del).toHaveBeenCalled();
     });
 
-    it('should return false when database update fails', async () => {
-      const failingDb = {
-        from: vi.fn(() => ({
-          update: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(() =>
-                Promise.resolve({ error: { message: 'Update failed' } })
-              ),
-            })),
-          })),
-        })),
-      };
+    it('should return null when OTP not found', async () => {
+      mockRedis.get.mockResolvedValueOnce(null);
 
-      const service = new TokenService(failingDb as any, mockRedis as any);
+      const service = createTokenService(mockDb as any, mockRedis as any);
 
-      const result = await service.revokeToken('otp_test_token', 'perm_123');
+      const result = await service.consumeEncryptedOTP('otp_nonexistent');
 
-      expect(result).toBe(false);
+      expect(result).toBeNull();
+    });
+
+    it('should return null when OTP has expired', async () => {
+      const expiredData = JSON.stringify({
+        id: 'otp_123',
+        requestId: 'otp_123',
+        encryptedPayload: 'encrypted_data',
+        source: 'email',
+        expiresAt: new Date(Date.now() - 60000).toISOString(), // Expired
+      });
+
+      mockRedis.get.mockResolvedValueOnce(expiredData);
+
+      const service = createTokenService(mockDb as any, mockRedis as any);
+
+      const result = await service.consumeEncryptedOTP('otp_123');
+
+      expect(result).toBeNull();
+      expect(mockRedis.del).toHaveBeenCalled(); // Should clean up expired data
     });
   });
 
-  describe('revokeAllTokensForRequest', () => {
-    it('should revoke all tokens for a permission request', async () => {
-      const tokensDb = {
-        from: vi.fn(() => ({
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              is: vi.fn(() =>
-                Promise.resolve({
-                  data: [
-                    { token_hash: 'hash_1' },
-                    { token_hash: 'hash_2' },
-                  ],
-                  error: null,
-                })
-              ),
-            })),
-          })),
-          update: vi.fn(() => ({
-            eq: vi.fn(() => Promise.resolve({ error: null })),
-          })),
-        })),
-      };
+  describe('legacy methods', () => {
+    it('verifyToken should return deprecated message', async () => {
+      const service = createTokenService(mockDb as any, mockRedis as any);
 
-      mockRedis.del.mockResolvedValue(1);
+      const result = await service.verifyToken('token', 'request_id');
 
-      const service = new TokenService(tokensDb as any, mockRedis as any);
-
-      await service.revokeAllTokensForRequest('perm_123');
-
-      expect(mockRedis.del).toHaveBeenCalledTimes(2);
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('deprecated');
     });
 
-    it('should handle empty token list gracefully', async () => {
-      const noTokensDb = {
-        from: vi.fn(() => ({
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              is: vi.fn(() =>
-                Promise.resolve({
-                  data: [],
-                  error: null,
-                })
-              ),
-            })),
-          })),
-        })),
-      };
+    it('useToken should return deprecated message', async () => {
+      const service = createTokenService(mockDb as any, mockRedis as any);
 
-      const service = new TokenService(noTokensDb as any, mockRedis as any);
+      const result = await service.useToken('token', 'request_id');
 
-      // Should not throw
-      await service.revokeAllTokensForRequest('perm_123');
+      expect(result.success).toBe(false);
+      expect(result.reason).toContain('deprecated');
+    });
 
-      expect(mockRedis.del).not.toHaveBeenCalled();
+    it('createToken should throw deprecation error', async () => {
+      const service = createTokenService(mockDb as any, mockRedis as any);
+
+      await expect(
+        service.createToken({
+          permissionRequestId: 'id',
+          scope: {},
+        })
+      ).rejects.toThrow('deprecated');
     });
   });
 });

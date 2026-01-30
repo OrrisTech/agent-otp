@@ -3,7 +3,7 @@
  */
 
 import { nanoid } from 'nanoid';
-import { API_KEY_PREFIX, TOKEN_PREFIX, PERMISSION_ID_PREFIX } from '@orrisai/agent-otp-shared';
+import { API_KEY_PREFIX, OTP_REQUEST_ID_PREFIX } from '@orrisai/agent-otp-shared';
 
 /**
  * Generates a new API key for an agent.
@@ -14,19 +14,11 @@ export function generateApiKey(): string {
 }
 
 /**
- * Generates a new OTP token.
- * Format: otp_<nanoid(24)>
+ * Generates a new OTP request ID.
+ * Format: otp_<nanoid(16)>
  */
-export function generateOtpToken(): string {
-  return `${TOKEN_PREFIX}${nanoid(24)}`;
-}
-
-/**
- * Generates a new permission request ID.
- * Format: perm_<nanoid(16)>
- */
-export function generatePermissionId(): string {
-  return `${PERMISSION_ID_PREFIX}${nanoid(16)}`;
+export function generateOtpRequestId(): string {
+  return `${OTP_REQUEST_ID_PREFIX}${nanoid(16)}`;
 }
 
 /**
