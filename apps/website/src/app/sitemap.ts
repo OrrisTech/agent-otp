@@ -2,10 +2,18 @@ import type { MetadataRoute } from 'next';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = 'https://agentotp.com';
+  const lastModified = new Date('2026-01-30');
 
   // Static pages
   const staticPages = [
-    '',
+    { path: '', priority: 1.0, changeFrequency: 'weekly' as const },
+    { path: '/use-cases', priority: 0.8, changeFrequency: 'monthly' as const },
+    { path: '/blog', priority: 0.7, changeFrequency: 'weekly' as const },
+    { path: '/contact', priority: 0.5, changeFrequency: 'monthly' as const },
+  ];
+
+  // Documentation pages
+  const docPages = [
     '/docs',
     '/docs/quickstart',
     '/docs/installation',
@@ -30,32 +38,25 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/docs/guides/telegram',
     '/docs/guides/self-hosting',
     '/docs/guides/security',
-    '/use-cases',
-    '/blog',
-    '/contact',
-    '/privacy',
-    '/terms',
-    '/security',
   ];
 
-  // Blog posts (would be dynamically generated in production)
-  const blogPosts = [
-    '/blog/launch',
-    '/blog/why-agent-security-matters',
-    '/blog/policy-best-practices',
-    '/blog/langchain-integration',
+  const entries: MetadataRoute.Sitemap = [
+    // Static pages with custom priorities
+    ...staticPages.map((page) => ({
+      url: `${baseUrl}${page.path}`,
+      lastModified,
+      changeFrequency: page.changeFrequency,
+      priority: page.priority,
+    })),
+
+    // Documentation pages
+    ...docPages.map((path) => ({
+      url: `${baseUrl}${path}`,
+      lastModified,
+      changeFrequency: 'weekly' as const,
+      priority: path === '/docs' ? 0.9 : 0.8,
+    })),
   ];
 
-  const allPages = [...staticPages, ...blogPosts];
-
-  return allPages.map((route) => ({
-    url: `${baseUrl}${route}`,
-    lastModified: new Date(),
-    changeFrequency: route.startsWith('/blog')
-      ? 'weekly'
-      : route.startsWith('/docs')
-        ? 'weekly'
-        : 'monthly',
-    priority: route === '' ? 1 : route.startsWith('/docs') ? 0.8 : 0.6,
-  }));
+  return entries;
 }
