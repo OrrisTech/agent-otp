@@ -159,7 +159,7 @@ After consumption, OTP is immediately deleted from server. Cannot be read again.
 
 ## Implementation Status
 
-> Last updated: 2025-01-30
+> Last updated: 2026-01-30
 
 | Component | Status | Description |
 |-----------|--------|-------------|
@@ -169,26 +169,49 @@ After consumption, OTP is immediately deleted from server. Cannot be read again.
 | **Documentation Website** | ✅ Complete | 35 pages with full documentation |
 | **Telegram Bot** | ✅ Complete | User approval notifications via Grammy |
 | **Email Integration** | ✅ Complete | Gmail API support, OTP extraction |
-| **Android App (React Native)** | ❌ Not Started | SMS OTP capture |
+| **Android App (React Native)** | ✅ Complete | SMS OTP capture with Expo |
 | **Web Dashboard** | ❌ Not Started | Web-based approval and management |
 
-### What Works Now
+### Architecture Overview
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  AI Agent  ←──→  SDK  ←──→  API Service  ←──→  Database     │
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                              Agent OTP System                                │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   ┌─────────────┐        ┌─────────────┐        ┌─────────────────────────┐  │
+│   │  AI Agent   │──SDK──▶│   API       │◀──────▶│  Database               │  │
+│   │  (requests) │        │  (Hono.js)  │        │  (PostgreSQL/Drizzle)   │  │
+│   └─────────────┘        └──────┬──────┘        └─────────────────────────┘  │
+│                                 │                                            │
+│         ┌───────────────────────┼───────────────────────┐                   │
+│         │                       │                       │                   │
+│         ▼                       ▼                       ▼                   │
+│   ┌───────────────┐     ┌───────────────┐     ┌───────────────────────┐     │
+│   │ Telegram Bot  │     │ Email Service │     │ Android App           │     │
+│   │ (Grammy)      │     │ (Gmail API)   │     │ (React Native/Expo)   │     │
+│   │               │     │               │     │                       │     │
+│   │ • Approvals   │     │ • OTP capture │     │ • SMS OTP capture     │     │
+│   │ • Denials     │     │ • Filtering   │     │ • Push notifications  │     │
+│   │ • Status      │     │ • Encryption  │     │ • Secure storage      │     │
+│   └───────────────┘     └───────────────┘     └───────────────────────┘     │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### What's Working
+
+- ✅ SDK for AI agents to request and consume OTPs
+- ✅ API service for OTP management
+- ✅ Telegram bot for user approvals
+- ✅ Email integration for email OTP capture
+- ✅ Android app for SMS OTP capture
 
 ### What's Missing
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Android App (SMS capture)                                   │
-│  Email Integration (email capture)                           │
-│  Telegram Bot / Dashboard (user approval)                    │
-└──────────────────────────────────────────────────────────────┘
-```
+- ❌ Web dashboard for management
+- ❌ iOS app (Android only currently)
+- ❌ Production deployment (self-hosted only)
 
 ## Quick Start
 
@@ -263,15 +286,63 @@ agent-otp/
 ├── apps/
 │   ├── api/              # Main API service (Hono + Cloudflare Workers)
 │   ├── website/          # Documentation website (Next.js)
-│   ├── dashboard/        # Web Dashboard (Next.js) - Coming soon
-│   ├── telegram-bot/     # Telegram approval bot - Coming soon
-│   └── mobile/           # React Native SMS app - Coming soon
+│   ├── telegram-bot/     # Telegram approval bot (Grammy)
+│   ├── email-integration/# Email OTP capture (Gmail API)
+│   ├── mobile/           # React Native SMS app (Expo)
+│   └── dashboard/        # Web Dashboard - Coming soon
 ├── packages/
 │   ├── sdk/              # TypeScript SDK
 │   └── shared/           # Shared types and utilities
 ├── docs/                 # Internal documentation
 └── docker-compose.yml    # Local development setup
 ```
+
+## Manual Configuration Required
+
+The following components require manual configuration before use:
+
+### Telegram Bot
+
+1. Create a bot with [@BotFather](https://t.me/botfather) to get `TELEGRAM_BOT_TOKEN`
+2. Set your Telegram user ID as `TELEGRAM_ADMIN_ID`
+3. Configure webhook URL for production deployment
+
+```bash
+# apps/telegram-bot/.env
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_ADMIN_ID=your_telegram_id
+AGENT_OTP_API_URL=http://localhost:8787
+AGENT_OTP_API_KEY=your_api_key
+```
+
+### Email Integration
+
+1. Enable Gmail API in Google Cloud Console
+2. Create OAuth2 credentials (Desktop app type)
+3. Run the authentication flow to get refresh token
+
+```bash
+# apps/email-integration/.env
+GMAIL_CLIENT_ID=your_client_id
+GMAIL_CLIENT_SECRET=your_client_secret
+GMAIL_REFRESH_TOKEN=your_refresh_token
+AGENT_OTP_API_URL=http://localhost:8787
+AGENT_OTP_API_KEY=your_api_key
+```
+
+### Android App (React Native)
+
+1. Install [Expo CLI](https://docs.expo.dev/get-started/installation/)
+2. Configure API endpoint in app settings
+3. Build APK or use Expo Go for development
+
+```bash
+cd apps/mobile
+bun install
+bun run android  # Or use Expo Go
+```
+
+**Note**: SMS permissions require physical Android device (not emulator).
 
 ## Documentation
 

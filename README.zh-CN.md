@@ -158,7 +158,7 @@ if (request.status === 'otp_received') {
 
 ## 实现状态
 
-> 最后更新: 2025-01-30
+> 最后更新: 2026-01-30
 
 | 组件 | 状态 | 说明 |
 |-----|------|------|
@@ -168,26 +168,49 @@ if (request.status === 'otp_received') {
 | **文档网站** | ✅ 已完成 | 35 个页面，完整文档 |
 | **Telegram Bot** | ✅ 已完成 | 使用 Grammy 框架的用户审批通知 |
 | **Email 集成** | ✅ 已完成 | Gmail API 支持，OTP 提取 |
-| **Android App (React Native)** | ❌ 未开始 | 短信 OTP 捕获 |
+| **Android App (React Native)** | ✅ 已完成 | 使用 Expo 的短信 OTP 捕获 |
 | **Web Dashboard** | ❌ 未开始 | Web 端审批和管理 |
 
-### 当前已实现
+### 架构概览
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  AI Agent  ←──→  SDK  ←──→  API 服务  ←──→  数据库/Redis    │
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                              Agent OTP 系统                                  │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   ┌─────────────┐        ┌─────────────┐        ┌─────────────────────────┐  │
+│   │  AI Agent   │──SDK──▶│   API       │◀──────▶│  数据库                 │  │
+│   │  (请求者)   │        │  (Hono.js)  │        │  (PostgreSQL/Drizzle)   │  │
+│   └─────────────┘        └──────┬──────┘        └─────────────────────────┘  │
+│                                 │                                            │
+│         ┌───────────────────────┼───────────────────────┐                   │
+│         │                       │                       │                   │
+│         ▼                       ▼                       ▼                   │
+│   ┌───────────────┐     ┌───────────────┐     ┌───────────────────────┐     │
+│   │ Telegram Bot  │     │ Email 服务    │     │ Android App           │     │
+│   │ (Grammy)      │     │ (Gmail API)   │     │ (React Native/Expo)   │     │
+│   │               │     │               │     │                       │     │
+│   │ • 审批        │     │ • OTP 捕获    │     │ • 短信 OTP 捕获       │     │
+│   │ • 拒绝        │     │ • 过滤        │     │ • 推送通知            │     │
+│   │ • 状态查询    │     │ • 加密        │     │ • 安全存储            │     │
+│   └───────────────┘     └───────────────┘     └───────────────────────┘     │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### 已完成功能
+
+- ✅ AI Agent 请求和消费 OTP 的 SDK
+- ✅ OTP 管理 API 服务
+- ✅ Telegram 机器人用于用户审批
+- ✅ 邮件 OTP 捕获集成
+- ✅ Android 短信 OTP 捕获应用
 
 ### 待开发
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Android App (短信捕获)                                       │
-│  Email 集成 (邮件捕获)                                        │
-│  Telegram Bot / Dashboard (用户审批)                          │
-└──────────────────────────────────────────────────────────────┘
-```
+- ❌ Web 管理仪表板
+- ❌ iOS 应用（目前仅支持 Android）
+- ❌ 生产环境部署（目前仅支持自托管）
 
 ## 快速开始
 
@@ -262,15 +285,63 @@ agent-otp/
 ├── apps/
 │   ├── api/              # 主 API 服务 (Hono + Cloudflare Workers)
 │   ├── website/          # 文档网站 (Next.js)
-│   ├── dashboard/        # Web Dashboard (Next.js) - 待开发
-│   ├── telegram-bot/     # Telegram 审批机器人 - 待开发
-│   └── mobile/           # React Native 短信 App - 待开发
+│   ├── telegram-bot/     # Telegram 审批机器人 (Grammy)
+│   ├── email-integration/# 邮件 OTP 捕获 (Gmail API)
+│   ├── mobile/           # React Native 短信 App (Expo)
+│   └── dashboard/        # Web Dashboard - 待开发
 ├── packages/
 │   ├── sdk/              # TypeScript SDK
 │   └── shared/           # 共享类型和工具
 ├── docs/                 # 内部文档
 └── docker-compose.yml    # 本地开发配置
 ```
+
+## 需要手动配置
+
+以下组件在使用前需要手动配置：
+
+### Telegram Bot
+
+1. 使用 [@BotFather](https://t.me/botfather) 创建机器人以获取 `TELEGRAM_BOT_TOKEN`
+2. 将您的 Telegram 用户 ID 设置为 `TELEGRAM_ADMIN_ID`
+3. 为生产部署配置 webhook URL
+
+```bash
+# apps/telegram-bot/.env
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_ADMIN_ID=your_telegram_id
+AGENT_OTP_API_URL=http://localhost:8787
+AGENT_OTP_API_KEY=your_api_key
+```
+
+### 邮件集成
+
+1. 在 Google Cloud Console 启用 Gmail API
+2. 创建 OAuth2 凭证（桌面应用类型）
+3. 运行认证流程获取 refresh token
+
+```bash
+# apps/email-integration/.env
+GMAIL_CLIENT_ID=your_client_id
+GMAIL_CLIENT_SECRET=your_client_secret
+GMAIL_REFRESH_TOKEN=your_refresh_token
+AGENT_OTP_API_URL=http://localhost:8787
+AGENT_OTP_API_KEY=your_api_key
+```
+
+### Android App (React Native)
+
+1. 安装 [Expo CLI](https://docs.expo.dev/get-started/installation/)
+2. 在应用设置中配置 API 端点
+3. 构建 APK 或使用 Expo Go 进行开发
+
+```bash
+cd apps/mobile
+bun install
+bun run android  # 或使用 Expo Go
+```
+
+**注意**：短信权限需要物理 Android 设备（模拟器不支持）。
 
 ## 文档
 
