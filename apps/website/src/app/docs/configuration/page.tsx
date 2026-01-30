@@ -20,12 +20,13 @@ export default function ConfigurationPage() {
 
       <p>
         Every Agent OTP client requires an API key for authentication. You can
-        create API keys in the{' '}
-        <Link href="/dashboard" className="text-primary hover:underline">
-          dashboard
-        </Link>{' '}
-        under <strong>Agents → Create Agent</strong>.
+        create API keys using the CLI after starting your self-hosted instance:
       </p>
+
+      <pre className="language-bash">
+        <code>{`# Create a new agent and get an API key
+docker compose exec api bun run cli agent:create --name "my-assistant"`}</code>
+      </pre>
 
       <h3>API Key Format</h3>
 

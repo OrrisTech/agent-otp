@@ -69,7 +69,7 @@ const apiKey = process.env.AGENT_OTP_API_KEY_NEW
   || process.env.AGENT_OTP_API_KEY;
 
 // After deploying with new key, remove old key from environment
-// and revoke it in the dashboard`}</code>
+// and revoke it via CLI: bun run cli agent:revoke --id AGENT_ID`}</code>
       </pre>
 
       <h2>Token Security</h2>

@@ -29,7 +29,7 @@ export default function SelfHostingPage() {
 
       <pre className="language-bash">
         <code>{`# Clone the repository
-git clone https://github.com/orrisai/agent-otp.git
+git clone https://github.com/orristech/agent-otp.git
 cd agent-otp
 
 # Copy environment template
@@ -88,7 +88,7 @@ version: '3.8'
 
 services:
   api:
-    image: ghcr.io/orrisai/agent-otp-api:latest
+    image: ghcr.io/orristech/agent-otp-api:latest
     ports:
       - "3000:3000"
     environment:
@@ -102,7 +102,7 @@ services:
     restart: unless-stopped
 
   dashboard:
-    image: ghcr.io/orrisai/agent-otp-dashboard:latest
+    image: ghcr.io/orristech/agent-otp-dashboard:latest
     ports:
       - "3001:3000"
     environment:
@@ -110,7 +110,7 @@ services:
     restart: unless-stopped
 
   telegram-bot:
-    image: ghcr.io/orrisai/agent-otp-telegram:latest
+    image: ghcr.io/orristech/agent-otp-telegram:latest
     environment:
       - API_URL=http://api:3000
       - TELEGRAM_BOT_TOKEN=\${TELEGRAM_BOT_TOKEN}

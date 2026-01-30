@@ -20,37 +20,45 @@ export default function QuickStartPage() {
 
       <ul>
         <li>Node.js 18+ or Bun 1.0+</li>
-        <li>An Agent OTP account (free tier available)</li>
+        <li>Docker and Docker Compose (for self-hosting)</li>
         <li>An existing AI agent or application</li>
       </ul>
 
-      <h2>Step 1: Create an account</h2>
+      <h2>Step 1: Start Agent OTP Server</h2>
 
       <p>
-        Sign up for a free account at{' '}
-        <Link href="/signup" className="text-primary hover:underline">
-          agentotp.com/signup
-        </Link>
-        . You&apos;ll get access to:
+        Clone the repository and start the server locally using Docker:
       </p>
 
-      <ul>
-        <li>1 agent</li>
-        <li>100 requests per month</li>
-        <li>Basic policies</li>
-        <li>Email notifications</li>
-      </ul>
+      <pre className="language-bash">
+        <code>{`# Clone the repository
+git clone https://github.com/orristech/agent-otp.git
+cd agent-otp
 
-      <h2>Step 2: Create an agent</h2>
+# Copy environment template
+cp .env.example .env
+
+# Start all services
+docker compose up -d`}</code>
+      </pre>
 
       <p>
-        In the dashboard, navigate to <strong>Agents</strong> and click{' '}
-        <strong>Create Agent</strong>. Give your agent a descriptive name and
-        save. You&apos;ll receive an API key that looks like:
+        The API will be available at <code>http://localhost:3000</code>.
       </p>
 
-      <pre className="language-text">
-        <code>ak_live_xxxxxxxxxxxxxxxxxxxx</code>
+      <h2>Step 2: Create an agent and API key</h2>
+
+      <p>
+        Generate an API key using the CLI:
+      </p>
+
+      <pre className="language-bash">
+        <code>{`# Create a new agent and generate API key
+docker compose exec api bun run cli agent:create --name "my-assistant"
+
+# Output:
+# Agent created successfully!
+# API Key: ak_live_xxxxxxxxxxxxxxxxxxxx`}</code>
       </pre>
 
       <div className="not-prose my-4 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4">
@@ -104,8 +112,8 @@ import { AgentOTPClient } from '@orrisai/agent-otp-sdk';
 
 export const otp = new AgentOTPClient({
   apiKey: process.env.AGENT_OTP_KEY!,
-  // Optional: for self-hosted deployments
-  // baseUrl: 'https://your-instance.com',
+  // Point to your local or self-hosted instance
+  baseUrl: process.env.AGENT_OTP_URL || 'http://localhost:3000',
 });`}</code>
       </pre>
 
@@ -232,7 +240,7 @@ async function sendInvoiceEmail(clientEmail: string, invoiceId: string) {
         </p>
         <div className="flex flex-wrap gap-4 text-sm">
           <a
-            href="https://github.com/yourusername/agent-otp/issues"
+            href="https://github.com/orristech/agent-otp/issues"
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary hover:underline"
@@ -240,15 +248,12 @@ async function sendInvoiceEmail(clientEmail: string, invoiceId: string) {
             GitHub Issues
           </a>
           <a
-            href="https://discord.gg/agentotp"
+            href="https://github.com/orristech/agent-otp/discussions"
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary hover:underline"
           >
-            Discord Community
-          </a>
-          <a href="mailto:support@agentotp.com" className="text-primary hover:underline">
-            Email Support
+            GitHub Discussions
           </a>
         </div>
       </div>

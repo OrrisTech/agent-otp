@@ -19,9 +19,9 @@ export default function PythonSDKPage() {
       <div className="not-prose my-4 rounded-lg border border-blue-500/50 bg-blue-500/10 p-4">
         <p className="text-sm text-blue-700 dark:text-blue-400">
           <strong>Coming Soon:</strong> The Python SDK is currently in development.
-          Join our{' '}
-          <a href="https://discord.gg/agentotp" className="underline">
-            Discord
+          Star the{' '}
+          <a href="https://github.com/orristech/agent-otp" className="underline" target="_blank" rel="noopener noreferrer">
+            GitHub repo
           </a>{' '}
           to be notified when it&apos;s released.
         </p>

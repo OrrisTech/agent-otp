@@ -25,13 +25,16 @@ export default function AuthenticationPage() {
 
       <h3>Creating an API Key</h3>
 
-      <ol>
-        <li>Log in to your Agent OTP dashboard</li>
-        <li>Navigate to <strong>Agents</strong></li>
-        <li>Click <strong>Create Agent</strong></li>
-        <li>Enter a name and description</li>
-        <li>Copy the generated API key</li>
-      </ol>
+      <p>Generate an API key using the CLI after starting your self-hosted instance:</p>
+
+      <pre className="language-bash">
+        <code>{`# Create a new agent and generate API key
+docker compose exec api bun run cli agent:create --name "my-assistant"
+
+# Output:
+# Agent created successfully!
+# API Key: ak_live_xxxxxxxxxxxxxxxxxxxx`}</code>
+      </pre>
 
       <div className="not-prose my-4 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4">
         <p className="text-sm text-amber-700 dark:text-amber-400">
@@ -146,15 +149,16 @@ const client = new AgentOTPClient({
       <h2>Revoking Keys</h2>
 
       <p>
-        Revoke compromised or unused keys immediately:
+        Revoke compromised or unused keys immediately using the CLI:
       </p>
 
-      <ol>
-        <li>Go to the Agent OTP dashboard</li>
-        <li>Navigate to <strong>Agents</strong></li>
-        <li>Select the agent</li>
-        <li>Click <strong>Revoke API Key</strong></li>
-      </ol>
+      <pre className="language-bash">
+        <code>{`# List agents to find the one to revoke
+docker compose exec api bun run cli agent:list
+
+# Revoke an API key
+docker compose exec api bun run cli agent:revoke --id AGENT_ID`}</code>
+      </pre>
 
       <p>
         Revoked keys will receive a <code>401 Unauthorized</code> response.
@@ -163,38 +167,28 @@ const client = new AgentOTPClient({
       <h2>Rate Limits</h2>
 
       <p>
-        API keys are subject to rate limits based on your plan:
+        Rate limits are configurable in your self-hosted instance. Default limits:
       </p>
 
       <div className="not-prose my-4 overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b border-border">
-              <th className="py-2 px-4 text-left font-semibold">Plan</th>
-              <th className="py-2 px-4 text-left font-semibold">Requests/min</th>
-              <th className="py-2 px-4 text-left font-semibold">Requests/month</th>
+              <th className="py-2 px-4 text-left font-semibold">Limit Type</th>
+              <th className="py-2 px-4 text-left font-semibold">Default</th>
+              <th className="py-2 px-4 text-left font-semibold">Environment Variable</th>
             </tr>
           </thead>
           <tbody>
             <tr className="border-b border-border">
-              <td className="py-2 px-4">Free</td>
-              <td className="py-2 px-4">10</td>
-              <td className="py-2 px-4">100</td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2 px-4">Pro</td>
+              <td className="py-2 px-4">Requests per minute</td>
               <td className="py-2 px-4">60</td>
-              <td className="py-2 px-4">10,000</td>
-            </tr>
-            <tr className="border-b border-border">
-              <td className="py-2 px-4">Team</td>
-              <td className="py-2 px-4">300</td>
-              <td className="py-2 px-4">100,000</td>
+              <td className="py-2 px-4 font-mono">RATE_LIMIT_PER_MIN</td>
             </tr>
             <tr>
-              <td className="py-2 px-4">Enterprise</td>
-              <td className="py-2 px-4">Custom</td>
-              <td className="py-2 px-4">Custom</td>
+              <td className="py-2 px-4">Requests per hour</td>
+              <td className="py-2 px-4">1000</td>
+              <td className="py-2 px-4 font-mono">RATE_LIMIT_PER_HOUR</td>
             </tr>
           </tbody>
         </table>

@@ -45,17 +45,15 @@ export default function TelegramSetupPage() {
 
       <ol>
         <li>
-          Go to your{' '}
-          <Link href="/dashboard/settings" className="text-primary hover:underline">
-            Agent OTP Dashboard Settings
-          </Link>
+          Generate a link code using the CLI:
         </li>
-        <li>
-          Navigate to <strong>Notifications → Telegram</strong>
-        </li>
-        <li>
-          Click <strong>Link Telegram Account</strong>
-        </li>
+      </ol>
+
+      <pre className="language-bash">
+        <code>{`docker compose exec api bun run cli telegram:link-code`}</code>
+      </pre>
+
+      <ol start={2}>
         <li>
           Copy the link code shown
         </li>
@@ -66,8 +64,7 @@ export default function TelegramSetupPage() {
 
       <div className="not-prose my-4 rounded-lg border border-green-500/50 bg-green-500/10 p-4">
         <p className="text-sm text-green-700 dark:text-green-400">
-          Once linked, you&apos;ll see a confirmation message in both Telegram
-          and your dashboard.
+          Once linked, you&apos;ll see a confirmation message in Telegram.
         </p>
       </div>
 
@@ -75,8 +72,15 @@ export default function TelegramSetupPage() {
 
       <ol>
         <li>
-          In the dashboard, click <strong>Send Test Notification</strong>
+          Send a test notification using the CLI:
         </li>
+      </ol>
+
+      <pre className="language-bash">
+        <code>{`docker compose exec api bun run cli telegram:test`}</code>
+      </pre>
+
+      <ol start={2}>
         <li>
           You should receive a test message in Telegram within seconds
         </li>
@@ -227,7 +231,10 @@ Expires in: 4:32
           Add <code>@AgentOTPBot</code> to your team group
         </li>
         <li>
-          Link the group in dashboard settings
+          Link the group using the CLI:
+          <pre className="language-bash my-2">
+            <code>{`docker compose exec api bun run cli telegram:link-group`}</code>
+          </pre>
         </li>
         <li>
           Configure which team members can approve requests
@@ -250,7 +257,7 @@ Expires in: 4:32
           Check that your account is linked: <code>/status</code>
         </li>
         <li>
-          Verify notifications are enabled in dashboard settings
+          Verify Telegram bot token is configured in your <code>.env</code> file
         </li>
         <li>
           Check quiet hours settings
