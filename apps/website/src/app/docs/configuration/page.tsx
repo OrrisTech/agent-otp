@@ -201,8 +201,8 @@ export const otp = new AgentOTPClient({
           </Link>
         </li>
         <li>
-          <Link href="/docs/concepts/permissions" className="text-primary hover:underline">
-            Learn about permissions
+          <Link href="/docs/concepts/how-it-works" className="text-primary hover:underline">
+            Learn how Agent OTP works
           </Link>
         </li>
         <li>

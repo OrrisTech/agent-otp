@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'LangChain Integration',
-  description: 'Integrate Agent OTP with LangChain to add one-time permissions to your LangChain agents and tools.',
+  description: 'Integrate Agent OTP with LangChain to securely relay OTPs to your LangChain agents.',
 };
 
 export default function LangChainIntegrationPage() {
@@ -12,329 +12,313 @@ export default function LangChainIntegrationPage() {
       <h1>LangChain Integration</h1>
 
       <p className="lead text-xl text-muted-foreground">
-        Add one-time permissions to your LangChain agents. Protect sensitive
-        tools with human-in-the-loop approval.
+        Securely relay OTPs to your LangChain agents. Enable your agents to
+        complete verification flows without direct access to SMS or email.
       </p>
 
-      <h2>Installation</h2>
+      <div className="not-prose my-4 rounded-lg border border-blue-500/50 bg-blue-500/10 p-4">
+        <p className="text-sm text-blue-700 dark:text-blue-400">
+          <strong>Note:</strong> The Python SDK is coming soon. This guide shows
+          the integration pattern using the TypeScript SDK. The Python SDK will
+          have a similar API.
+        </p>
+      </div>
 
-      <pre className="language-bash">
-        <code>{`pip install agent-otp langchain langchain-openai`}</code>
-      </pre>
-
-      <h2>Quick Start</h2>
+      <h2>Overview</h2>
 
       <p>
-        Wrap your LangChain tools with OTP protection:
+        Agent OTP helps your LangChain agents receive verification codes securely:
       </p>
 
-      <pre className="language-python">
-        <code>{`from agent_otp import AgentOTPClient
-from langchain.tools import BaseTool
-from langchain_openai import ChatOpenAI
-from langchain.agents import AgentExecutor, create_openai_functions_agent
-from langchain.prompts import ChatPromptTemplate
+      <ul>
+        <li>Agent requests an OTP when it needs to complete a verification</li>
+        <li>User approves which OTP to share</li>
+        <li>OTP is encrypted and delivered to the agent</li>
+        <li>OTP is auto-deleted after consumption</li>
+      </ul>
 
-# Initialize OTP client
+      <h2>TypeScript Example</h2>
+
+      <p>
+        Here&apos;s how to create an OTP-enabled tool for LangChain.js:
+      </p>
+
+      <pre className="language-typescript">
+        <code>{`import {
+  AgentOTPClient,
+  generateKeyPair,
+  exportPublicKey,
+} from '@orrisai/agent-otp-sdk';
+import { DynamicStructuredTool } from '@langchain/core/tools';
+import { z } from 'zod';
+
+const otp = new AgentOTPClient({
+  apiKey: process.env.AGENT_OTP_API_KEY!,
+});
+
+// Store key pair securely (e.g., in environment or secure storage)
+const { publicKey, privateKey } = await generateKeyPair();
+
+const signUpTool = new DynamicStructuredTool({
+  name: 'sign_up_for_service',
+  description: 'Sign up for a service that requires email verification',
+  schema: z.object({
+    email: z.string().email(),
+    serviceName: z.string(),
+    serviceUrl: z.string().url(),
+  }),
+  func: async ({ email, serviceName, serviceUrl }) => {
+    // Step 1: Start the sign-up process (your implementation)
+    await startSignUp(serviceUrl, email);
+
+    // Step 2: Request OTP from Agent OTP
+    const request = await otp.requestOTP({
+      reason: \`Sign up verification for \${serviceName}\`,
+      expectedSender: serviceName,
+      filter: {
+        sources: ['email'],
+        senderPattern: \`*@\${new URL(serviceUrl).hostname}\`,
+      },
+      publicKey: await exportPublicKey(publicKey),
+      waitForOTP: true,
+      timeout: 120000, // 2 minutes
+    });
+
+    if (request.status !== 'otp_received') {
+      return \`Could not get verification code: \${request.status}\`;
+    }
+
+    // Step 3: Consume the OTP
+    const { code } = await otp.consumeOTP(request.id, privateKey);
+
+    // Step 4: Complete verification (your implementation)
+    await completeVerification(serviceUrl, code);
+
+    return \`Successfully signed up for \${serviceName} with \${email}\`;
+  },
+});`}</code>
+      </pre>
+
+      <h2>Python Example (Coming Soon)</h2>
+
+      <pre className="language-python">
+        <code>{`from agent_otp import AgentOTPClient, generate_key_pair, export_public_key
+from langchain.tools import BaseTool
+
 otp = AgentOTPClient(api_key="ak_live_xxxx")
 
-class OTPProtectedEmailTool(BaseTool):
-    name = "send_email"
-    description = "Send an email to a recipient. Requires approval."
+# Generate encryption keys
+public_key, private_key = generate_key_pair()
 
-    def _run(self, recipient: str, subject: str, body: str) -> str:
-        # Request permission
-        permission = otp.request_permission(
-            action="email.send",
-            resource=f"email:{recipient}",
-            scope={"max_emails": 1},
-            context={
-                "recipient": recipient,
-                "subject": subject,
-                "reason": "Agent sending email on behalf of user"
+class SignUpTool(BaseTool):
+    name = "sign_up_for_service"
+    description = "Sign up for a service that requires email verification"
+
+    def _run(self, email: str, service_name: str, service_url: str) -> str:
+        # Start sign-up process
+        start_sign_up(service_url, email)
+
+        # Request OTP
+        request = otp.request_otp(
+            reason=f"Sign up verification for {service_name}",
+            expected_sender=service_name,
+            filter={
+                "sources": ["email"],
+                "sender_pattern": f"*@{service_url.split('/')[2]}"
             },
-            wait_for_approval=True,
+            public_key=export_public_key(public_key),
+            wait_for_otp=True,
             timeout=120
         )
 
-        if permission.status != "approved":
-            return f"Email not sent: {permission.status} - {permission.reason}"
+        if request.status != "otp_received":
+            return f"Could not get verification code: {request.status}"
 
-        # Send email (your implementation)
-        result = self._send_email(recipient, subject, body)
+        # Consume the OTP
+        result = otp.consume_otp(request.id, private_key)
 
-        # Mark token as used
-        otp.use_token(permission.id, permission.token, {
-            "recipient": recipient,
-            "subject": subject
-        })
+        # Complete verification
+        complete_verification(service_url, result.code)
 
-        return f"Email sent successfully to {recipient}"
-
-    def _send_email(self, recipient: str, subject: str, body: str):
-        # Your email sending implementation
-        pass
-
-# Create agent
-tools = [OTPProtectedEmailTool()]
-llm = ChatOpenAI(model="gpt-4")
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a helpful assistant."),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}")
-])
-
-agent = create_openai_functions_agent(llm, tools, prompt)
-agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
-
-# Run
-result = agent_executor.invoke({
-    "input": "Send an email to john@example.com about the meeting tomorrow"
-})`}</code>
+        return f"Successfully signed up for {service_name}"`}</code>
       </pre>
 
-      <h2>OTP Tool Decorator</h2>
+      <h2>Handling OTP States</h2>
 
       <p>
-        Use the decorator for cleaner code:
+        Your agent should handle different OTP request states:
       </p>
 
-      <pre className="language-python">
-        <code>{`from agent_otp.langchain import otp_protected
-from langchain.tools import tool
+      <pre className="language-typescript">
+        <code>{`const handleOTPRequest = async (reason: string, sender: string) => {
+  const request = await otp.requestOTP({
+    reason,
+    expectedSender: sender,
+    publicKey: await exportPublicKey(publicKey),
+    waitForOTP: true,
+    timeout: 120000,
+  });
 
-@tool
-@otp_protected(
-    action="file.write",
-    scope_builder=lambda path, content: {
-        "max_size": len(content),
-        "allowed_paths": [path]
+  switch (request.status) {
+    case 'otp_received':
+      const { code } = await otp.consumeOTP(request.id, privateKey);
+      return { success: true, code };
+
+    case 'pending_approval':
+      return { success: false, reason: 'Waiting for user approval' };
+
+    case 'approved':
+      return { success: false, reason: 'Waiting for OTP to arrive' };
+
+    case 'denied':
+      return { success: false, reason: 'User denied the request' };
+
+    case 'expired':
+      return { success: false, reason: 'Request timed out' };
+
+    default:
+      return { success: false, reason: \`Unexpected status: \${request.status}\` };
+  }
+};`}</code>
+      </pre>
+
+      <h2>Error Handling</h2>
+
+      <pre className="language-typescript">
+        <code>{`import {
+  OTPNotFoundError,
+  OTPExpiredError,
+  OTPAlreadyConsumedError,
+  OTPApprovalDeniedError,
+  DecryptionError,
+  RateLimitError,
+} from '@orrisai/agent-otp-sdk';
+
+const signUpTool = new DynamicStructuredTool({
+  name: 'sign_up_with_otp',
+  description: 'Sign up with OTP verification',
+  schema: z.object({ /* ... */ }),
+  func: async (params) => {
+    try {
+      const request = await otp.requestOTP({
+        reason: 'Sign up verification',
+        publicKey: await exportPublicKey(publicKey),
+        waitForOTP: true,
+      });
+
+      if (request.status === 'otp_received') {
+        const { code } = await otp.consumeOTP(request.id, privateKey);
+        return \`Received code: \${code}\`;
+      }
+
+      return \`OTP request status: \${request.status}\`;
+
+    } catch (error) {
+      if (error instanceof OTPApprovalDeniedError) {
+        return 'User denied the OTP request';
+      }
+      if (error instanceof OTPExpiredError) {
+        return 'OTP request expired - please try again';
+      }
+      if (error instanceof OTPAlreadyConsumedError) {
+        return 'OTP was already consumed';
+      }
+      if (error instanceof DecryptionError) {
+        return 'Failed to decrypt OTP - check your keys';
+      }
+      if (error instanceof RateLimitError) {
+        return \`Rate limited - retry in \${error.retryAfter}s\`;
+      }
+      throw error;
     }
-)
-def write_file(path: str, content: str) -> str:
-    """Write content to a file. Requires approval."""
-    with open(path, "w") as f:
-        f.write(content)
-    return f"File written to {path}"
-
-@tool
-@otp_protected(
-    action="database.query",
-    auto_use_token=True  # Automatically mark token as used
-)
-def execute_sql(query: str) -> str:
-    """Execute a SQL query. Requires approval for destructive operations."""
-    # Implementation
-    pass`}</code>
-      </pre>
-
-      <h2>Custom Approval Handler</h2>
-
-      <p>
-        Handle pending approvals in your agent:
-      </p>
-
-      <pre className="language-python">
-        <code>{`from agent_otp.langchain import OTPToolkit
-
-class CustomOTPToolkit(OTPToolkit):
-    def on_pending_approval(self, info):
-        """Called when human approval is needed."""
-        print(f"Waiting for approval: {info.approval_url}")
-
-        # Optionally notify user via your preferred channel
-        self.notify_user(
-            f"Your agent needs approval to {info.action}. "
-            f"Approve here: {info.approval_url}"
-        )
-
-    def notify_user(self, message: str):
-        # Your notification implementation
-        pass
-
-toolkit = CustomOTPToolkit(api_key="ak_live_xxxx")
-protected_tools = toolkit.wrap_tools(tools)`}</code>
+  },
+});`}</code>
       </pre>
 
       <h2>LangGraph Integration</h2>
 
       <p>
-        Use with LangGraph for more complex workflows:
+        For complex workflows, use LangGraph with OTP nodes:
       </p>
 
-      <pre className="language-python">
-        <code>{`from langgraph.graph import StateGraph, END
-from agent_otp import AgentOTPClient
+      <pre className="language-typescript">
+        <code>{`import { StateGraph, END } from '@langchain/langgraph';
 
-otp = AgentOTPClient(api_key="ak_live_xxxx")
+interface WorkflowState {
+  action: string;
+  otpRequestId?: string;
+  otpStatus?: string;
+  code?: string;
+  result?: string;
+}
 
-def request_permission_node(state):
-    """Node that requests OTP permission."""
-    permission = otp.request_permission(
-        action=state["action"],
-        scope=state["scope"],
-        context=state["context"],
-        wait_for_approval=False  # Don't block
-    )
+const requestOTPNode = async (state: WorkflowState) => {
+  const request = await otp.requestOTP({
+    reason: \`Verification for \${state.action}\`,
+    publicKey: await exportPublicKey(publicKey),
+    waitForOTP: false,
+  });
 
-    return {
-        **state,
-        "permission_id": permission.id,
-        "permission_status": permission.status,
-        "approval_url": permission.approval_url
-    }
+  return {
+    ...state,
+    otpRequestId: request.id,
+    otpStatus: request.status,
+  };
+};
 
-def check_approval_node(state):
-    """Node that checks approval status."""
-    permission = otp.get_permission(state["permission_id"])
-    return {**state, "permission_status": permission.status}
+const checkStatusNode = async (state: WorkflowState) => {
+  const status = await otp.getOTPStatus(state.otpRequestId!);
+  return { ...state, otpStatus: status.status };
+};
 
-def execute_action_node(state):
-    """Node that executes the protected action."""
-    if state["permission_status"] != "approved":
-        return {**state, "result": "Permission not granted"}
+const consumeOTPNode = async (state: WorkflowState) => {
+  const { code } = await otp.consumeOTP(state.otpRequestId!, privateKey);
+  return { ...state, code };
+};
 
-    # Execute the protected action
-    result = execute_action(state)
+const graph = new StateGraph<WorkflowState>({
+  channels: {
+    action: { value: null },
+    otpRequestId: { value: null },
+    otpStatus: { value: null },
+    code: { value: null },
+    result: { value: null },
+  },
+});
 
-    # Mark token as used
-    otp.use_token(state["permission_id"], state["token"])
+graph.addNode('request_otp', requestOTPNode);
+graph.addNode('check_status', checkStatusNode);
+graph.addNode('consume_otp', consumeOTPNode);
 
-    return {**state, "result": result}
+graph.setEntryPoint('request_otp');
 
-# Build graph
-graph = StateGraph()
-graph.add_node("request_permission", request_permission_node)
-graph.add_node("check_approval", check_approval_node)
-graph.add_node("execute_action", execute_action_node)
+graph.addConditionalEdges('request_otp', (state) =>
+  state.otpStatus === 'otp_received' ? 'consume_otp' : 'check_status'
+);
 
-graph.set_entry_point("request_permission")
-graph.add_conditional_edges(
-    "request_permission",
-    lambda s: "execute" if s["permission_status"] == "approved" else "wait",
-    {"execute": "execute_action", "wait": "check_approval"}
-)
-graph.add_conditional_edges(
-    "check_approval",
-    lambda s: "execute" if s["permission_status"] == "approved" else "wait",
-    {"execute": "execute_action", "wait": "check_approval"}
-)
-graph.add_edge("execute_action", END)`}</code>
-      </pre>
+graph.addConditionalEdges('check_status', (state) =>
+  state.otpStatus === 'otp_received' ? 'consume_otp' : 'check_status'
+);
 
-      <h2>Policy Examples</h2>
-
-      <p>
-        Configure policies for your LangChain agents:
-      </p>
-
-      <pre className="language-yaml">
-        <code>{`# Auto-approve read operations
-- name: "Auto-approve LangChain reads"
-  conditions:
-    action:
-      starts_with: "file.read"
-    context.agent_type:
-      equals: "langchain"
-  action: auto_approve
-  scope_template:
-    max_size: 1048576
-
-# Require approval for writes
-- name: "LangChain write operations"
-  conditions:
-    action:
-      starts_with: "file.write"
-    context.agent_type:
-      equals: "langchain"
-  action: require_approval
-
-# Deny dangerous operations
-- name: "Block dangerous operations"
-  conditions:
-    action:
-      in: ["system.exec", "database.drop"]
-  action: deny
-  priority: 100`}</code>
-      </pre>
-
-      <h2>Streaming Support</h2>
-
-      <p>
-        Handle permissions with streaming agents:
-      </p>
-
-      <pre className="language-python">
-        <code>{`async def stream_with_otp():
-    async for event in agent_executor.astream_events(
-        {"input": "Send an email about the project update"},
-        version="v1"
-    ):
-        if event["event"] == "on_tool_start":
-            tool_name = event["name"]
-            if tool_name == "send_email":
-                print("Requesting permission for email...")
-
-        elif event["event"] == "on_tool_end":
-            print(f"Tool completed: {event['data']['output']}")
-
-        elif event["event"] == "on_chat_model_stream":
-            print(event["data"]["chunk"].content, end="")`}</code>
-      </pre>
-
-      <h2>Error Handling</h2>
-
-      <pre className="language-python">
-        <code>{`from agent_otp import (
-    PermissionDeniedError,
-    TokenExpiredError,
-    RateLimitError
-)
-
-class RobustOTPTool(BaseTool):
-    name = "protected_action"
-    description = "A tool with robust error handling"
-
-    def _run(self, **kwargs) -> str:
-        try:
-            permission = otp.request_permission(
-                action="action.name",
-                scope={},
-                wait_for_approval=True,
-                timeout=60
-            )
-
-            if permission.status == "approved":
-                result = self._execute(permission.token, **kwargs)
-                otp.use_token(permission.id, permission.token)
-                return result
-            else:
-                return f"Action not permitted: {permission.reason}"
-
-        except PermissionDeniedError as e:
-            return f"Permission denied by policy: {e.reason}"
-        except TokenExpiredError:
-            return "Approval timeout - please try again"
-        except RateLimitError as e:
-            return f"Rate limited - retry in {e.retry_after}s"`}</code>
+graph.addEdge('consume_otp', END);`}</code>
       </pre>
 
       <h2>See Also</h2>
 
       <ul>
         <li>
-          <Link href="/docs/sdk/python" className="text-primary hover:underline">
-            Python SDK Reference
+          <Link href="/docs/sdk/typescript" className="text-primary hover:underline">
+            TypeScript SDK Reference
           </Link>
         </li>
         <li>
-          <Link href="/docs/integrations/crewai" className="text-primary hover:underline">
-            CrewAI Integration
+          <Link href="/docs/concepts/how-it-works" className="text-primary hover:underline">
+            How Agent OTP Works
           </Link>
         </li>
         <li>
-          <Link href="/docs/guides/policies" className="text-primary hover:underline">
-            Policy Best Practices
+          <Link href="/docs/integrations/custom" className="text-primary hover:underline">
+            Custom Agent Integration
           </Link>
         </li>
       </ul>

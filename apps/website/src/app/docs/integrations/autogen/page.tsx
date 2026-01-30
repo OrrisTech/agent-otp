@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'AutoGen Integration',
-  description: 'Integrate Agent OTP with Microsoft AutoGen for secure multi-agent conversations with permission controls.',
+  description: 'Integrate Agent OTP with Microsoft AutoGen to securely relay OTPs in multi-agent conversations.',
 };
 
 export default function AutoGenIntegrationPage() {
@@ -12,52 +12,75 @@ export default function AutoGenIntegrationPage() {
       <h1>AutoGen Integration</h1>
 
       <p className="lead text-xl text-muted-foreground">
-        Add permission controls to Microsoft AutoGen conversations. Secure
-        multi-agent interactions with human-in-the-loop approval.
+        Securely relay OTPs to your AutoGen agents. Enable multi-agent
+        conversations to complete verification flows securely.
       </p>
 
-      <h2>Installation</h2>
+      <div className="not-prose my-4 rounded-lg border border-blue-500/50 bg-blue-500/10 p-4">
+        <p className="text-sm text-blue-700 dark:text-blue-400">
+          <strong>Note:</strong> The Python SDK is coming soon. This guide shows
+          the integration pattern. The Python SDK will have a similar API.
+        </p>
+      </div>
 
-      <pre className="language-bash">
-        <code>{`pip install agent-otp pyautogen`}</code>
-      </pre>
-
-      <h2>Quick Start</h2>
+      <h2>Overview</h2>
 
       <p>
-        Create OTP-protected functions for AutoGen agents:
+        Agent OTP helps your AutoGen agents receive verification codes securely:
       </p>
 
+      <ul>
+        <li>Agent requests an OTP when it needs to complete a verification</li>
+        <li>User approves which OTP to share</li>
+        <li>OTP is encrypted and delivered to the agent</li>
+        <li>OTP is auto-deleted after consumption</li>
+      </ul>
+
+      <h2>Python Example (Coming Soon)</h2>
+
       <pre className="language-python">
-        <code>{`from agent_otp import AgentOTPClient
+        <code>{`from agent_otp import AgentOTPClient, generate_key_pair, export_public_key
 import autogen
 
 otp = AgentOTPClient(api_key="ak_live_xxxx")
 
-# Define protected function
-def send_email_with_otp(recipient: str, subject: str, body: str) -> str:
-    """Send an email with OTP protection."""
-    permission = otp.request_permission(
-        action="email.send",
-        resource=f"email:{recipient}",
-        scope={"max_emails": 1},
-        context={
-            "recipient": recipient,
-            "subject": subject,
-            "agent": "autogen_assistant"
+# Generate encryption keys
+public_key, private_key = generate_key_pair()
+
+def sign_up_with_otp(
+    service_name: str,
+    email: str,
+    service_url: str
+) -> str:
+    """Sign up for a service with OTP verification."""
+
+    # Step 1: Start the sign-up process
+    start_signup(service_url, email)
+
+    # Step 2: Request OTP from Agent OTP
+    request = otp.request_otp(
+        reason=f"Sign up verification for {service_name}",
+        expected_sender=service_name,
+        filter={
+            "sources": ["email"],
+            "sender_pattern": f"*@{service_url.split('/')[2]}"
         },
-        wait_for_approval=True,
+        public_key=export_public_key(public_key),
+        wait_for_otp=True,
         timeout=120
     )
 
-    if permission.status != "approved":
-        return f"Email not sent: {permission.status}"
+    if request.status != "otp_received":
+        return f"Could not get OTP: {request.status}"
 
-    # Send email (your implementation)
-    result = _send_email(recipient, subject, body)
+    # Step 3: Consume the OTP
+    result = otp.consume_otp(request.id, private_key)
 
-    otp.use_token(permission.id, permission.token)
-    return f"Email sent to {recipient}"
+    # Step 4: Complete verification
+    complete_verification(service_url, result.code)
+
+    return f"Successfully signed up for {service_name} with {email}"
+
 
 # Configure agents
 config_list = [{"model": "gpt-4", "api_key": "your-api-key"}]
@@ -65,7 +88,7 @@ config_list = [{"model": "gpt-4", "api_key": "your-api-key"}]
 assistant = autogen.AssistantAgent(
     name="assistant",
     llm_config={"config_list": config_list},
-    system_message="You are a helpful assistant with email capabilities."
+    system_message="You help users sign up for services."
 )
 
 user_proxy = autogen.UserProxyAgent(
@@ -75,251 +98,247 @@ user_proxy = autogen.UserProxyAgent(
     code_execution_config={"work_dir": "workspace"}
 )
 
-# Register the protected function
+# Register the OTP function
 user_proxy.register_function(
     function_map={
-        "send_email": send_email_with_otp
+        "sign_up_with_otp": sign_up_with_otp
     }
 )
 
 # Start conversation
 user_proxy.initiate_chat(
     assistant,
-    message="Send an email to john@example.com about tomorrow's meeting"
+    message="Sign up for Acme Inc at https://acme.com with user@example.com"
 )`}</code>
       </pre>
 
       <h2>OTP Function Decorator</h2>
 
       <p>
-        Use the decorator to protect AutoGen functions:
+        Create a decorator to add OTP capabilities to functions:
       </p>
 
       <pre className="language-python">
-        <code>{`from agent_otp.autogen import otp_protected
+        <code>{`from functools import wraps
+from agent_otp import AgentOTPClient, generate_key_pair, export_public_key
 
-@otp_protected(
-    action="file.write",
-    scope_builder=lambda path, content: {
-        "max_size": len(content),
-        "allowed_paths": [path]
-    }
+class OTPManager:
+    """Centralized OTP management for AutoGen."""
+
+    def __init__(self, api_key: str):
+        self.otp = AgentOTPClient(api_key=api_key)
+        self.public_key, self.private_key = generate_key_pair()
+
+    def get_otp(self, reason: str, expected_sender: str = None, **kwargs) -> str:
+        """Request and consume an OTP."""
+        request = self.otp.request_otp(
+            reason=reason,
+            expected_sender=expected_sender,
+            public_key=export_public_key(self.public_key),
+            wait_for_otp=True,
+            **kwargs
+        )
+
+        if request.status != "otp_received":
+            raise Exception(f"Failed to get OTP: {request.status}")
+
+        result = self.otp.consume_otp(request.id, self.private_key)
+        return result.code
+
+
+# Create global OTP manager
+otp_manager = OTPManager(api_key="ak_live_xxxx")
+
+def requires_otp(reason_template: str, expected_sender_key: str = None):
+    """Decorator to add OTP verification to a function."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # Format the reason with kwargs
+            reason = reason_template.format(**kwargs)
+            expected_sender = kwargs.get(expected_sender_key) if expected_sender_key else None
+
+            # Get the OTP
+            code = otp_manager.get_otp(
+                reason=reason,
+                expected_sender=expected_sender
+            )
+
+            # Add code to kwargs
+            kwargs['otp_code'] = code
+
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+@requires_otp(
+    reason_template="Verification for {service_name}",
+    expected_sender_key="service_name"
 )
-def write_file(path: str, content: str) -> str:
-    """Write content to a file."""
-    with open(path, "w") as f:
-        f.write(content)
-    return f"File written to {path}"
-
-@otp_protected(
-    action="api.call",
-    require_approval=True  # Always require human approval
-)
-def call_external_api(url: str, payload: dict) -> str:
-    """Make an external API call."""
-    import requests
-    response = requests.post(url, json=payload)
-    return response.text
-
-# Register protected functions
-user_proxy.register_function(
-    function_map={
-        "write_file": write_file,
-        "call_external_api": call_external_api
-    }
-)`}</code>
+def complete_signup(service_name: str, email: str, otp_code: str = None) -> str:
+    """Complete a signup with OTP verification."""
+    # Use otp_code for verification
+    verify_email(service_name, email, otp_code)
+    return f"Successfully verified {email} for {service_name}"`}</code>
       </pre>
 
-      <h2>GroupChat with Permissions</h2>
+      <h2>GroupChat with OTP</h2>
 
       <p>
-        Add permission controls to group conversations:
+        Enable OTP verification in multi-agent group chats:
       </p>
 
       <pre className="language-python">
-        <code>{`from agent_otp.autogen import OTPGroupChatManager
-
-# Create multiple agents
+        <code>{`# Create multiple agents
 researcher = autogen.AssistantAgent(
     name="researcher",
     llm_config={"config_list": config_list},
-    system_message="Research specialist"
-)
-
-writer = autogen.AssistantAgent(
-    name="writer",
-    llm_config={"config_list": config_list},
-    system_message="Content writer"
+    system_message="Research services and find signup URLs"
 )
 
 executor = autogen.AssistantAgent(
     name="executor",
     llm_config={"config_list": config_list},
-    system_message="Action executor with protected capabilities"
+    system_message="Execute signups using available tools"
 )
 
-# Create group chat with OTP manager
+# Create group chat
 groupchat = autogen.GroupChat(
-    agents=[user_proxy, researcher, writer, executor],
+    agents=[user_proxy, researcher, executor],
     messages=[],
     max_round=20
 )
 
-# OTP-enabled manager that can control sensitive operations
-manager = OTPGroupChatManager(
+manager = autogen.GroupChatManager(
     groupchat=groupchat,
-    llm_config={"config_list": config_list},
-    otp_client=otp,
-    protected_agents=["executor"],  # Monitor this agent's actions
-    approval_required_actions=["email.send", "file.write", "api.call"]
+    llm_config={"config_list": config_list}
 )
 
-user_proxy.initiate_chat(
-    manager,
-    message="Research AI trends and write a report, then email it to the team"
-)`}</code>
-      </pre>
-
-      <h2>Code Execution Protection</h2>
-
-      <p>
-        Protect code execution with OTP:
-      </p>
-
-      <pre className="language-python">
-        <code>{`from agent_otp.autogen import OTPCodeExecutor
-
-# Create protected code executor
-code_executor = OTPCodeExecutor(
-    otp_client=otp,
-    work_dir="workspace",
-    allowed_languages=["python", "bash"],
-    auto_approve_patterns=[
-        r"^print\\(.*\\)$",  # Auto-approve simple prints
-        r"^import (pandas|numpy)",  # Auto-approve safe imports
-    ],
-    deny_patterns=[
-        r"subprocess",  # Deny subprocess calls
-        r"os\\.system",  # Deny system calls
-        r"eval\\(",  # Deny eval
-    ]
-)
-
-user_proxy = autogen.UserProxyAgent(
-    name="user_proxy",
-    human_input_mode="NEVER",
-    code_execution_config={
-        "executor": code_executor
+# Register OTP functions for the executor
+user_proxy.register_function(
+    function_map={
+        "sign_up_with_otp": sign_up_with_otp,
+        "verify_email": lambda email, service: otp_manager.get_otp(
+            reason=f"Email verification for {service}",
+            expected_sender=service
+        )
     }
 )
 
-# Code execution will require OTP approval unless auto-approved
+# Start conversation
 user_proxy.initiate_chat(
-    assistant,
-    message="Write a Python script to analyze the sales data"
+    manager,
+    message="Research and sign up for the top 3 AI newsletter services"
 )`}</code>
-      </pre>
-
-      <h2>Conversation Hooks</h2>
-
-      <p>
-        Add OTP checks at conversation boundaries:
-      </p>
-
-      <pre className="language-python">
-        <code>{`class OTPAssistant(autogen.AssistantAgent):
-    def __init__(self, otp_client, **kwargs):
-        super().__init__(**kwargs)
-        self.otp = otp_client
-        self._message_count = 0
-
-    def receive(self, message, sender, request_reply=None, silent=False):
-        self._message_count += 1
-
-        # Check if action needs approval
-        if self._requires_approval(message):
-            permission = self.otp.request_permission(
-                action="conversation.sensitive",
-                scope={"message_count": self._message_count},
-                context={
-                    "message_preview": message[:200] if isinstance(message, str) else str(message)[:200],
-                    "sender": sender.name
-                },
-                wait_for_approval=True
-            )
-
-            if permission.status != "approved":
-                return f"Action not approved: {permission.reason}"
-
-        return super().receive(message, sender, request_reply, silent)
-
-    def _requires_approval(self, message):
-        # Define your logic for when approval is needed
-        sensitive_keywords = ["delete", "execute", "send", "transfer"]
-        if isinstance(message, str):
-            return any(kw in message.lower() for kw in sensitive_keywords)
-        return False`}</code>
       </pre>
 
       <h2>Two-Agent Conversations</h2>
 
       <pre className="language-python">
-        <code>{`from agent_otp.autogen import OTPConversation
+        <code>{`from agent_otp import OTPApprovalDeniedError, OTPExpiredError
 
-# Create a protected conversation
-conversation = OTPConversation(
-    otp_client=otp,
-    agents=[assistant, user_proxy],
-    permissions_required_for=["function_call", "code_execution"],
-    max_auto_replies=5
-)
+class OTPConversation:
+    """Manage OTP-enabled conversations."""
 
-# Start with automatic permission management
-result = conversation.start(
-    initial_message="Help me process and analyze the customer data",
-    on_permission_required=lambda info: print(f"Approval needed: {info.approval_url}")
-)`}</code>
+    def __init__(self, assistant, user_proxy, otp_manager):
+        self.assistant = assistant
+        self.user_proxy = user_proxy
+        self.otp_manager = otp_manager
+
+    def run(self, initial_message: str) -> str:
+        """Run a conversation with OTP support."""
+
+        # Register OTP helper function
+        def get_verification_code(service: str, reason: str) -> str:
+            try:
+                code = self.otp_manager.get_otp(
+                    reason=reason,
+                    expected_sender=service,
+                    timeout=120
+                )
+                return f"Verification code: {code}"
+            except OTPApprovalDeniedError:
+                return "User denied the OTP request"
+            except OTPExpiredError:
+                return "OTP request timed out"
+            except Exception as e:
+                return f"Error getting OTP: {str(e)}"
+
+        self.user_proxy.register_function(
+            function_map={"get_verification_code": get_verification_code}
+        )
+
+        # Run the conversation
+        self.user_proxy.initiate_chat(
+            self.assistant,
+            message=initial_message
+        )
+
+        return self.user_proxy.last_message()
+
+
+# Usage
+conversation = OTPConversation(assistant, user_proxy, otp_manager)
+result = conversation.run("Sign up for GitHub with dev@example.com")`}</code>
       </pre>
 
-      <h2>Policy Configuration</h2>
+      <h2>Error Handling</h2>
 
-      <pre className="language-yaml">
-        <code>{`# Auto-approve safe AutoGen operations
-- name: "AutoGen safe operations"
-  conditions:
-    action:
-      in: ["conversation.continue", "code.read"]
-    context.agent:
-      matches: "autogen_.*"
-  action: auto_approve
+      <pre className="language-python">
+        <code>{`from agent_otp import (
+    OTPNotFoundError,
+    OTPExpiredError,
+    OTPAlreadyConsumedError,
+    OTPApprovalDeniedError,
+    RateLimitError,
+)
 
-# Require approval for code execution
-- name: "AutoGen code execution"
-  conditions:
-    action:
-      equals: "code.execute"
-    context.agent:
-      matches: "autogen_.*"
-  action: require_approval
-  scope_template:
-    max_execution_time: 30
-    allowed_languages: ["python"]
+def robust_otp_signup(service: str, email: str) -> str:
+    """Sign up with comprehensive error handling."""
+    try:
+        # Start signup
+        start_signup(service, email)
 
-# Deny dangerous patterns
-- name: "AutoGen dangerous patterns"
-  conditions:
-    context.code_pattern:
-      matches: "(subprocess|os\\.system|eval)"
-  action: deny
-  priority: 100`}</code>
+        # Get OTP
+        code = otp_manager.get_otp(
+            reason=f"Signup for {service}",
+            expected_sender=service,
+            filter={"sources": ["email"]},
+            timeout=120
+        )
+
+        # Complete verification
+        complete_verification(service, code)
+        return f"Successfully signed up for {service}"
+
+    except OTPApprovalDeniedError:
+        return f"Signup cancelled: User denied OTP access"
+
+    except OTPExpiredError:
+        return f"Signup failed: Verification timed out"
+
+    except OTPAlreadyConsumedError:
+        return f"Signup failed: OTP already used"
+
+    except RateLimitError as e:
+        return f"Signup delayed: Rate limited, retry in {e.retry_after}s"
+
+    except Exception as e:
+        return f"Signup error: {str(e)}"`}</code>
       </pre>
 
       <h2>See Also</h2>
 
       <ul>
         <li>
-          <Link href="/docs/sdk/python" className="text-primary hover:underline">
-            Python SDK Reference
+          <Link href="/docs/sdk/typescript" className="text-primary hover:underline">
+            TypeScript SDK Reference
+          </Link>
+        </li>
+        <li>
+          <Link href="/docs/concepts/how-it-works" className="text-primary hover:underline">
+            How Agent OTP Works
           </Link>
         </li>
         <li>

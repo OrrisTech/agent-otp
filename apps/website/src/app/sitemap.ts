@@ -18,23 +18,28 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/docs/quickstart',
     '/docs/installation',
     '/docs/configuration',
-    '/docs/concepts/permissions',
-    '/docs/concepts/tokens',
-    '/docs/concepts/policies',
-    '/docs/concepts/scopes',
+    // Concepts
+    '/docs/concepts/how-it-works',
+    '/docs/concepts/encryption',
+    '/docs/concepts/sources',
+    // Setup
+    '/docs/setup/android',
+    '/docs/setup/email',
+    // SDK
     '/docs/sdk/typescript',
     '/docs/sdk/python',
     '/docs/sdk/errors',
+    // API
     '/docs/api/authentication',
-    '/docs/api/permissions',
-    '/docs/api/policies',
+    '/docs/api/permissions',  // OTP API (kept for backwards compatibility)
     '/docs/api/agents',
     '/docs/api/audit',
+    // Integrations
     '/docs/integrations/langchain',
     '/docs/integrations/crewai',
     '/docs/integrations/autogen',
     '/docs/integrations/custom',
-    '/docs/guides/policies',
+    // Guides
     '/docs/guides/telegram',
     '/docs/guides/self-hosting',
     '/docs/guides/security',

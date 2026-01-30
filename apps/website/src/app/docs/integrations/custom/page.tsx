@@ -13,7 +13,7 @@ export default function CustomIntegrationPage() {
 
       <p className="lead text-xl text-muted-foreground">
         Integrate Agent OTP with any AI agent framework or custom implementation.
-        Learn the patterns and best practices for secure integration.
+        Learn the patterns and best practices for secure OTP relay.
       </p>
 
       <h2>Integration Pattern</h2>
@@ -23,266 +23,211 @@ export default function CustomIntegrationPage() {
       </p>
 
       <pre className="language-text">
-        <code>{`Agent wants to perform action
+        <code>{`Agent needs verification code
         │
         ▼
-Request permission from Agent OTP
+Generate key pair (once per agent session)
         │
-        ├─── Auto-approved ──▶ Receive token immediately
+        ▼
+Request OTP from Agent OTP
         │
-        ├─── Needs approval ──▶ Wait for human decision
+        ├─── pending_approval ──▶ Wait for user approval
         │                              │
-        │                              ├─── Approved ──▶ Receive token
+        │                              ├─── approved ──▶ Wait for OTP
+        │                              │                    │
+        │                              │                    └─── otp_received ──▶ Consume
         │                              │
-        │                              └─── Denied ──▶ Handle gracefully
+        │                              └─── denied ──▶ Handle gracefully
         │
-        └─── Denied by policy ──▶ Handle gracefully
-        │
-        ▼
-Perform action with token
+        └─── expired ──▶ Handle gracefully
         │
         ▼
-Mark token as used`}</code>
+Consume OTP (one-time read)
+        │
+        ▼
+Decrypt with private key
+        │
+        ▼
+Use the code`}</code>
       </pre>
 
       <h2>TypeScript Implementation</h2>
 
       <pre className="language-typescript">
-        <code>{`import { AgentOTPClient } from '@orrisai/agent-otp-sdk';
+        <code>{`import {
+  AgentOTPClient,
+  generateKeyPair,
+  exportPublicKey,
+  OTPRequestStatus,
+} from '@orrisai/agent-otp-sdk';
 
 // Initialize client
 const otp = new AgentOTPClient({
-  apiKey: process.env.AGENT_OTP_KEY!,
+  apiKey: process.env.AGENT_OTP_API_KEY!,
 });
 
-// Your agent's action executor
-class SecureActionExecutor {
-  private otp: AgentOTPClient;
+// Generate key pair once per agent session
+const { publicKey, privateKey } = await generateKeyPair();
 
-  constructor(otpClient: AgentOTPClient) {
+// Your agent's OTP-enabled action executor
+class SecureAgentExecutor {
+  private otp: AgentOTPClient;
+  private publicKey: CryptoKey;
+  private privateKey: CryptoKey;
+
+  constructor(
+    otpClient: AgentOTPClient,
+    publicKey: CryptoKey,
+    privateKey: CryptoKey
+  ) {
     this.otp = otpClient;
+    this.publicKey = publicKey;
+    this.privateKey = privateKey;
   }
 
-  async executeAction(
+  async executeWithOTP(
     action: string,
-    params: Record<string, unknown>,
-    context: Record<string, unknown>
-  ): Promise<{ success: boolean; result?: unknown; error?: string }> {
-    // 1. Request permission
-    const permission = await this.otp.requestPermission({
-      action,
-      scope: this.buildScope(action, params),
-      context: {
-        ...context,
-        params,
-        timestamp: new Date().toISOString(),
-      },
-      waitForApproval: true,
-      timeout: 60000,
-      onPendingApproval: (info) => {
-        // Notify user that approval is needed
-        this.notifyPendingApproval(info);
-      },
+    params: Record<string, unknown>
+  ): Promise<{ success: boolean; code?: string; error?: string }> {
+    // 1. Request OTP
+    const request = await this.otp.requestOTP({
+      reason: \`\${action}: \${JSON.stringify(params)}\`,
+      expectedSender: params.service as string,
+      filter: params.filter as { sources?: string[]; senderPattern?: string },
+      publicKey: await exportPublicKey(this.publicKey),
+      waitForOTP: true,
+      timeout: 120000,
     });
 
-    // 2. Check result
-    if (permission.status !== 'approved') {
+    // 2. Check status
+    if (request.status !== 'otp_received') {
       return {
         success: false,
-        error: \`Action not permitted: \${permission.reason || permission.status}\`,
+        error: \`OTP request failed: \${request.status}\`,
       };
     }
 
-    // 3. Execute the action
+    // 3. Consume the OTP
     try {
-      const result = await this.performAction(action, params, permission.token!);
-
-      // 4. Mark token as used
-      await this.otp.useToken(permission.id, permission.token!, {
-        result_summary: JSON.stringify(result).slice(0, 500),
-      });
-
-      return { success: true, result };
+      const { code } = await this.otp.consumeOTP(request.id, this.privateKey);
+      return { success: true, code };
     } catch (error) {
-      // Revoke token on failure
-      await this.otp.revokeToken(permission.id, permission.token!);
-      throw error;
+      return {
+        success: false,
+        error: \`Failed to consume OTP: \${error}\`,
+      };
     }
   }
+}
 
-  private buildScope(action: string, params: Record<string, unknown>) {
-    // Define scopes based on action type
-    const scopeBuilders: Record<string, () => Record<string, unknown>> = {
-      'email.send': () => ({
-        max_emails: 1,
-        allowed_recipients: [params.to],
-      }),
-      'file.write': () => ({
-        max_size: 1048576,
-        allowed_paths: [params.path],
-      }),
-      'api.call': () => ({
-        allowed_urls: [params.url],
-        allowed_methods: ['GET', 'POST'],
-      }),
-    };
+// Usage
+const executor = new SecureAgentExecutor(otp, publicKey, privateKey);
 
-    return scopeBuilders[action]?.() || {};
-  }
+const result = await executor.executeWithOTP('signup_verification', {
+  service: 'Acme Inc',
+  email: 'user@example.com',
+  filter: {
+    sources: ['email'],
+    senderPattern: '*@acme.com',
+  },
+});
 
-  private async performAction(
-    action: string,
-    params: Record<string, unknown>,
-    token: string
-  ): Promise<unknown> {
-    // Your action implementation
-    // The token can be passed to downstream services for verification
-    throw new Error(\`Action \${action} not implemented\`);
-  }
-
-  private notifyPendingApproval(info: { approvalUrl: string }) {
-    console.log(\`Approval needed: \${info.approvalUrl}\`);
-    // Implement your notification logic
-  }
+if (result.success) {
+  console.log('Received OTP:', result.code);
+  // Use the code for verification
 }`}</code>
       </pre>
 
-      <h2>Python Implementation</h2>
+      <h2>Python Implementation (Coming Soon)</h2>
 
       <pre className="language-python">
-        <code>{`from agent_otp import AgentOTPClient, PermissionDeniedError
-from typing import Any, Dict, Optional, Callable
+        <code>{`from agent_otp import (
+    AgentOTPClient,
+    generate_key_pair,
+    export_public_key,
+)
+from typing import Dict, Any, Optional
 
-class SecureActionExecutor:
+class SecureAgentExecutor:
     def __init__(self, api_key: str):
         self.otp = AgentOTPClient(api_key=api_key)
-        self.action_handlers: Dict[str, Callable] = {}
+        self.public_key, self.private_key = generate_key_pair()
 
-    def register_action(self, action: str, handler: Callable):
-        """Register a handler for an action type."""
-        self.action_handlers[action] = handler
-
-    def execute(
+    def execute_with_otp(
         self,
         action: str,
-        params: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None
+        params: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Execute an action with OTP protection."""
+        """Execute an action that requires OTP verification."""
 
-        # Build scope based on action
-        scope = self._build_scope(action, params)
+        # Build filter from params
+        filter_opts = params.get("filter", {})
 
-        # Request permission
-        permission = self.otp.request_permission(
-            action=action,
-            scope=scope,
-            context={
-                **(context or {}),
-                "params": params,
-            },
-            wait_for_approval=True,
-            timeout=60
+        # Request OTP
+        request = self.otp.request_otp(
+            reason=f"{action}: {params}",
+            expected_sender=params.get("service"),
+            filter=filter_opts if filter_opts else None,
+            public_key=export_public_key(self.public_key),
+            wait_for_otp=True,
+            timeout=120
         )
 
-        if permission.status != "approved":
+        if request.status != "otp_received":
             return {
                 "success": False,
-                "error": f"Permission {permission.status}: {permission.reason}"
+                "error": f"OTP request failed: {request.status}"
             }
 
-        # Execute action
+        # Consume the OTP
         try:
-            handler = self.action_handlers.get(action)
-            if not handler:
-                raise ValueError(f"No handler for action: {action}")
-
-            result = handler(params, permission.token)
-
-            # Mark token as used
-            self.otp.use_token(
-                permission.id,
-                permission.token,
-                {"result": str(result)[:500]}
-            )
-
-            return {"success": True, "result": result}
-
+            result = self.otp.consume_otp(request.id, self.private_key)
+            return {"success": True, "code": result.code}
         except Exception as e:
-            # Revoke token on failure
-            self.otp.revoke_token(permission.id, permission.token)
-            raise
-
-    def _build_scope(self, action: str, params: Dict) -> Dict:
-        """Build scope constraints based on action type."""
-        scope_builders = {
-            "email.send": lambda p: {
-                "max_emails": 1,
-                "allowed_recipients": [p.get("to")]
-            },
-            "file.write": lambda p: {
-                "max_size": 1048576,
-                "allowed_paths": [p.get("path")]
-            },
-            "database.query": lambda p: {
-                "allowed_operations": ["SELECT"],
-                "max_rows": 1000
-            }
-        }
-
-        builder = scope_builders.get(action, lambda p: {})
-        return builder(params)
+            return {"success": False, "error": str(e)}
 
 
 # Usage
-executor = SecureActionExecutor(api_key="ak_live_xxxx")
+executor = SecureAgentExecutor(api_key="ak_live_xxxx")
 
-# Register action handlers
-executor.register_action(
-    "email.send",
-    lambda params, token: send_email(params["to"], params["subject"], params["body"])
-)
+result = executor.execute_with_otp("signup_verification", {
+    "service": "Acme Inc",
+    "email": "user@example.com",
+    "filter": {
+        "sources": ["email"],
+        "sender_pattern": "*@acme.com"
+    }
+})
 
-executor.register_action(
-    "file.write",
-    lambda params, token: write_file(params["path"], params["content"])
-)
-
-# Execute with OTP protection
-result = executor.execute(
-    action="email.send",
-    params={"to": "user@example.com", "subject": "Hello", "body": "..."},
-    context={"triggered_by": "user_request"}
-)`}</code>
+if result["success"]:
+    print(f"Received OTP: {result['code']}")`}</code>
       </pre>
 
       <h2>Webhook Integration</h2>
 
       <p>
-        For asynchronous agents, use webhooks to receive approval notifications:
+        For asynchronous agents, use webhooks to receive OTP notifications:
       </p>
 
       <pre className="language-typescript">
-        <code>{`// 1. Request permission without waiting
-const permission = await otp.requestPermission({
-  action: 'email.send',
-  scope: { max_emails: 1 },
-  waitForApproval: false,
+        <code>{`// 1. Request OTP without waiting
+const request = await otp.requestOTP({
+  reason: 'Signup verification',
+  publicKey: await exportPublicKey(publicKey),
+  waitForOTP: false,  // Don't block
   webhookUrl: 'https://your-agent.com/webhooks/otp',
 });
 
-if (permission.status === 'pending') {
-  // Store permission ID for later
-  await saveJobState({
-    jobId,
-    permissionId: permission.id,
-    status: 'waiting_approval',
-  });
-}
+// Store request ID for later
+await saveJobState({
+  jobId,
+  otpRequestId: request.id,
+  status: 'waiting_for_otp',
+});
 
 // 2. Handle webhook callback
 app.post('/webhooks/otp', async (req, res) => {
-  const { permission_id, status, token } = req.body;
+  const { request_id, status } = req.body;
 
   // Verify webhook signature
   const signature = req.headers['x-otp-signature'];
@@ -291,18 +236,63 @@ app.post('/webhooks/otp', async (req, res) => {
   }
 
   // Resume the job
-  const job = await getJobByPermissionId(permission_id);
+  const job = await getJobByOTPRequestId(request_id);
 
-  if (status === 'approved') {
-    // Continue with the action
-    await executeAction(job, token);
-  } else {
-    // Handle denial
-    await markJobFailed(job, 'Permission denied');
+  if (status === 'otp_received') {
+    // Consume the OTP
+    const { code } = await otp.consumeOTP(request_id, privateKey);
+    await completeJob(job, code);
+  } else if (status === 'denied' || status === 'expired') {
+    await failJob(job, \`OTP \${status}\`);
   }
 
   res.status(200).send('OK');
 });`}</code>
+      </pre>
+
+      <h2>Polling Pattern</h2>
+
+      <p>
+        If webhooks aren&apos;t available, use polling:
+      </p>
+
+      <pre className="language-typescript">
+        <code>{`async function pollForOTP(
+  requestId: string,
+  maxAttempts: number = 60,
+  intervalMs: number = 2000
+): Promise<string | null> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const status = await otp.getOTPStatus(requestId);
+
+    switch (status.status) {
+      case 'otp_received':
+        const { code } = await otp.consumeOTP(requestId, privateKey);
+        return code;
+
+      case 'denied':
+      case 'expired':
+      case 'cancelled':
+        return null;
+
+      case 'pending_approval':
+      case 'approved':
+        // Still waiting, continue polling
+        await sleep(intervalMs);
+        break;
+
+      default:
+        throw new Error(\`Unexpected status: \${status.status}\`);
+    }
+  }
+
+  // Timeout
+  return null;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}`}</code>
       </pre>
 
       <h2>Middleware Pattern</h2>
@@ -312,43 +302,61 @@ app.post('/webhooks/otp', async (req, res) => {
       </p>
 
       <pre className="language-typescript">
-        <code>{`// OTP middleware for your agent
-function createOTPMiddleware(otp: AgentOTPClient) {
+        <code>{`type Action = {
+  type: string;
+  requiresOTP?: boolean;
+  otpReason?: string;
+  params: Record<string, unknown>;
+};
+
+function createOTPMiddleware(
+  otp: AgentOTPClient,
+  publicKey: CryptoKey,
+  privateKey: CryptoKey
+) {
   return async function otpMiddleware(
-    action: string,
-    params: unknown,
-    next: () => Promise<unknown>
+    action: Action,
+    next: (code?: string) => Promise<unknown>
   ) {
     // Check if action requires OTP
-    if (!requiresOTP(action)) {
+    if (!action.requiresOTP) {
       return next();
     }
 
-    // Request permission
-    const permission = await otp.requestPermission({
-      action,
-      scope: buildScope(action, params),
-      waitForApproval: true,
+    // Request OTP
+    const request = await otp.requestOTP({
+      reason: action.otpReason || action.type,
+      publicKey: await exportPublicKey(publicKey),
+      waitForOTP: true,
     });
 
-    if (permission.status !== 'approved') {
-      throw new PermissionDeniedError(permission.reason);
+    if (request.status !== 'otp_received') {
+      throw new Error(\`OTP request failed: \${request.status}\`);
     }
 
-    // Execute action
-    const result = await next();
+    // Consume OTP
+    const { code } = await otp.consumeOTP(request.id, privateKey);
 
-    // Mark token as used
-    await otp.useToken(permission.id, permission.token!);
-
-    return result;
+    // Execute action with code
+    return next(code);
   };
 }
 
 // Use in your agent
-const middleware = createOTPMiddleware(otp);
+const middleware = createOTPMiddleware(otp, publicKey, privateKey);
 
-agent.use(middleware);`}</code>
+await middleware(
+  {
+    type: 'signup',
+    requiresOTP: true,
+    otpReason: 'Sign up for Acme Inc',
+    params: { email: 'user@example.com' },
+  },
+  async (code) => {
+    // Use the OTP code
+    await completeSignup(code!);
+  }
+);`}</code>
       </pre>
 
       <h2>Error Handling Best Practices</h2>
@@ -359,50 +367,71 @@ agent.use(middleware);`}</code>
   AuthenticationError,
   ValidationError,
   RateLimitError,
-  PermissionDeniedError,
-  TokenExpiredError,
+  OTPNotFoundError,
+  OTPExpiredError,
+  OTPAlreadyConsumedError,
+  OTPApprovalDeniedError,
+  DecryptionError,
 } from '@orrisai/agent-otp-sdk';
 
-async function executeWithOTP(action: string, params: unknown) {
+async function executeWithOTP(action: string): Promise<{
+  success: boolean;
+  code?: string;
+  error?: string;
+  retryAfter?: number;
+}> {
   try {
-    const permission = await otp.requestPermission({
-      action,
-      scope: {},
-      waitForApproval: true,
+    const request = await otp.requestOTP({
+      reason: action,
+      publicKey: await exportPublicKey(publicKey),
+      waitForOTP: true,
     });
 
-    if (permission.status === 'approved') {
-      await performAction(action, params);
-      await otp.useToken(permission.id, permission.token!);
-      return { success: true };
+    if (request.status === 'otp_received') {
+      const { code } = await otp.consumeOTP(request.id, privateKey);
+      return { success: true, code };
     }
 
-    return { success: false, reason: permission.reason };
+    return { success: false, error: \`Status: \${request.status}\` };
 
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      // API key issue - log and alert
-      console.error('OTP authentication failed');
-      throw new Error('Configuration error');
+      // API key issue
+      console.error('Invalid API key');
+      return { success: false, error: 'Authentication failed' };
     }
 
     if (error instanceof RateLimitError) {
       // Queue for retry
-      await queueForRetry(action, params, error.retryAfter);
-      return { success: false, reason: 'Rate limited', retryAfter: error.retryAfter };
+      return {
+        success: false,
+        error: 'Rate limited',
+        retryAfter: error.retryAfter,
+      };
     }
 
     if (error instanceof ValidationError) {
-      // Log validation errors for debugging
-      console.error('Invalid OTP request:', error.details);
-      throw error;
+      // Invalid request
+      return { success: false, error: \`Validation: \${error.message}\` };
     }
 
-    if (error instanceof PermissionDeniedError) {
-      return { success: false, reason: error.reason };
+    if (error instanceof OTPApprovalDeniedError) {
+      return { success: false, error: 'User denied the request' };
     }
 
-    // Unknown error - rethrow
+    if (error instanceof OTPExpiredError) {
+      return { success: false, error: 'Request expired' };
+    }
+
+    if (error instanceof OTPAlreadyConsumedError) {
+      return { success: false, error: 'OTP already consumed' };
+    }
+
+    if (error instanceof DecryptionError) {
+      return { success: false, error: 'Decryption failed - check keys' };
+    }
+
+    // Unknown error
     throw error;
   }
 }`}</code>
@@ -411,40 +440,49 @@ async function executeWithOTP(action: string, params: unknown) {
       <h2>Testing Integration</h2>
 
       <pre className="language-typescript">
-        <code>{`import { AgentOTPClient } from '@orrisai/agent-otp-sdk';
+        <code>{`import { AgentOTPClient, generateKeyPair, exportPublicKey } from '@orrisai/agent-otp-sdk';
 
 describe('OTP Integration', () => {
   let otp: AgentOTPClient;
+  let publicKey: CryptoKey;
+  let privateKey: CryptoKey;
 
-  beforeEach(() => {
-    // Use test API key - auto-approves all requests
+  beforeAll(async () => {
+    // Use test API key (auto-approves requests)
     otp = new AgentOTPClient({
       apiKey: process.env.AGENT_OTP_TEST_KEY!,
     });
+
+    const keyPair = await generateKeyPair();
+    publicKey = keyPair.publicKey;
+    privateKey = keyPair.privateKey;
   });
 
-  it('should request and use permission', async () => {
-    const permission = await otp.requestPermission({
-      action: 'test.action',
-      scope: { test: true },
+  it('should request and consume OTP', async () => {
+    const request = await otp.requestOTP({
+      reason: 'Test verification',
+      publicKey: await exportPublicKey(publicKey),
+      waitForOTP: true,
     });
 
-    expect(permission.status).toBe('approved');
-    expect(permission.token).toBeDefined();
+    expect(request.status).toBe('otp_received');
 
-    const result = await otp.useToken(permission.id, permission.token!);
-    expect(result.success).toBe(true);
+    const { code } = await otp.consumeOTP(request.id, privateKey);
+    expect(code).toBeDefined();
+    expect(code.length).toBeGreaterThan(0);
   });
 
-  it('should handle denied permissions', async () => {
-    // Test keys can simulate denials with special context
-    const permission = await otp.requestPermission({
-      action: 'test.action',
-      scope: {},
-      context: { _test_deny: true },
+  it('should handle cancellation', async () => {
+    const request = await otp.requestOTP({
+      reason: 'Test cancellation',
+      publicKey: await exportPublicKey(publicKey),
+      waitForOTP: false,
     });
 
-    expect(permission.status).toBe('denied');
+    await otp.cancelOTPRequest(request.id);
+
+    const status = await otp.getOTPStatus(request.id);
+    expect(status.status).toBe('cancelled');
   });
 });`}</code>
       </pre>
@@ -458,13 +496,18 @@ describe('OTP Integration', () => {
           </Link>
         </li>
         <li>
-          <Link href="/docs/sdk/python" className="text-primary hover:underline">
-            Python SDK Reference
+          <Link href="/docs/concepts/how-it-works" className="text-primary hover:underline">
+            How Agent OTP Works
+          </Link>
+        </li>
+        <li>
+          <Link href="/docs/concepts/encryption" className="text-primary hover:underline">
+            End-to-End Encryption
           </Link>
         </li>
         <li>
           <Link href="/docs/api/permissions" className="text-primary hover:underline">
-            Permissions API
+            OTP API Reference
           </Link>
         </li>
       </ul>

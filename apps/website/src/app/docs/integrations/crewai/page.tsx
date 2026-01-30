@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'CrewAI Integration',
-  description: 'Integrate Agent OTP with CrewAI to add one-time permissions to your AI crew members and tasks.',
+  description: 'Integrate Agent OTP with CrewAI to securely relay OTPs to your AI crew members.',
 };
 
 export default function CrewAIIntegrationPage() {
@@ -12,88 +12,105 @@ export default function CrewAIIntegrationPage() {
       <h1>CrewAI Integration</h1>
 
       <p className="lead text-xl text-muted-foreground">
-        Add permission controls to your CrewAI crews. Protect sensitive
-        operations with human-in-the-loop approval.
+        Securely relay OTPs to your CrewAI agents. Enable your crew members to
+        complete verification flows without direct access to SMS or email.
       </p>
 
-      <h2>Installation</h2>
+      <div className="not-prose my-4 rounded-lg border border-blue-500/50 bg-blue-500/10 p-4">
+        <p className="text-sm text-blue-700 dark:text-blue-400">
+          <strong>Note:</strong> The Python SDK is coming soon. This guide shows
+          the integration pattern. The Python SDK will have a similar API.
+        </p>
+      </div>
 
-      <pre className="language-bash">
-        <code>{`pip install agent-otp crewai crewai-tools`}</code>
-      </pre>
-
-      <h2>Quick Start</h2>
+      <h2>Overview</h2>
 
       <p>
-        Create OTP-protected tools for your CrewAI agents:
+        Agent OTP helps your CrewAI agents receive verification codes securely:
       </p>
 
+      <ul>
+        <li>Crew member requests an OTP when it needs to complete a verification</li>
+        <li>User approves which OTP to share</li>
+        <li>OTP is encrypted and delivered to the agent</li>
+        <li>OTP is auto-deleted after consumption</li>
+      </ul>
+
+      <h2>Python Example (Coming Soon)</h2>
+
       <pre className="language-python">
-        <code>{`from agent_otp import AgentOTPClient
+        <code>{`from agent_otp import AgentOTPClient, generate_key_pair, export_public_key
 from crewai import Agent, Task, Crew
 from crewai_tools import BaseTool
 
 otp = AgentOTPClient(api_key="ak_live_xxxx")
 
-class OTPProtectedEmailTool(BaseTool):
-    name: str = "Send Email"
-    description: str = "Sends an email to a recipient. Requires approval."
+# Generate encryption keys
+public_key, private_key = generate_key_pair()
 
-    def _run(self, recipient: str, subject: str, body: str) -> str:
-        # Request permission
-        permission = otp.request_permission(
-            action="email.send",
-            resource=f"email:{recipient}",
-            scope={
-                "max_emails": 1,
-                "allowed_recipients": [recipient]
+class OTPSignUpTool(BaseTool):
+    name: str = "Sign Up with OTP"
+    description: str = "Signs up for a service and handles OTP verification."
+
+    def _run(self, service_name: str, email: str, service_url: str) -> str:
+        # Step 1: Start the sign-up process
+        self._start_signup(service_url, email)
+
+        # Step 2: Request OTP from Agent OTP
+        request = otp.request_otp(
+            reason=f"Sign up verification for {service_name}",
+            expected_sender=service_name,
+            filter={
+                "sources": ["email"],
+                "sender_pattern": f"*@{service_url.split('/')[2]}"
             },
-            context={
-                "recipient": recipient,
-                "subject": subject,
-                "agent": "crewai_email_agent"
-            },
-            wait_for_approval=True,
+            public_key=export_public_key(public_key),
+            wait_for_otp=True,
             timeout=120
         )
 
-        if permission.status != "approved":
-            return f"Email not sent: Permission {permission.status}"
+        if request.status != "otp_received":
+            return f"Could not get OTP: {request.status}"
 
-        # Send email (your implementation)
-        self._send_email(recipient, subject, body)
+        # Step 3: Consume the OTP
+        result = otp.consume_otp(request.id, private_key)
 
-        # Mark token as used
-        otp.use_token(permission.id, permission.token)
+        # Step 4: Complete verification
+        self._complete_verification(service_url, result.code)
 
-        return f"Email sent to {recipient}"
+        return f"Successfully signed up for {service_name} with {email}"
 
-    def _send_email(self, recipient: str, subject: str, body: str):
-        # Your email implementation
+    def _start_signup(self, url: str, email: str):
+        # Your sign-up implementation
         pass
 
-# Create agents with protected tools
-email_tool = OTPProtectedEmailTool()
+    def _complete_verification(self, url: str, code: str):
+        # Your verification implementation
+        pass
 
-email_agent = Agent(
-    role="Email Specialist",
-    goal="Handle all email communications professionally",
-    backstory="Expert at crafting and sending professional emails",
-    tools=[email_tool],
+
+# Create agents with OTP tools
+signup_tool = OTPSignUpTool()
+
+signup_agent = Agent(
+    role="Account Specialist",
+    goal="Handle service registrations and verifications",
+    backstory="Expert at signing up for online services",
+    tools=[signup_tool],
     verbose=True
 )
 
 # Create task
-email_task = Task(
-    description="Send a follow-up email to john@example.com about the proposal",
-    expected_output="Confirmation that email was sent",
-    agent=email_agent
+signup_task = Task(
+    description="Sign up for Acme Inc service at https://acme.com with user@example.com",
+    expected_output="Confirmation that signup was completed",
+    agent=signup_agent
 )
 
 # Create and run crew
 crew = Crew(
-    agents=[email_agent],
-    tasks=[email_task],
+    agents=[signup_agent],
+    tasks=[signup_task],
     verbose=True
 )
 
@@ -103,240 +120,206 @@ result = crew.kickoff()`}</code>
       <h2>OTP Tool Wrapper</h2>
 
       <p>
-        Use the wrapper to protect existing CrewAI tools:
+        Create a wrapper to add OTP capabilities to existing tools:
       </p>
 
       <pre className="language-python">
-        <code>{`from agent_otp.crewai import OTPToolWrapper
-from crewai_tools import FileWriterTool, DirectorySearchTool
+        <code>{`from agent_otp import AgentOTPClient, generate_key_pair, export_public_key
 
-# Wrap existing tools
-file_writer = FileWriterTool()
-protected_file_writer = OTPToolWrapper(
-    tool=file_writer,
-    otp_client=otp,
-    action="file.write",
-    scope_builder=lambda **kwargs: {
-        "max_size": 1048576,
-        "allowed_paths": [kwargs.get("file_path", "/tmp")]
-    }
-)
+class OTPEnabledTool(BaseTool):
+    """Base class for tools that need OTP verification."""
 
-# Use in agent
-file_agent = Agent(
-    role="File Manager",
-    goal="Manage files safely with proper approvals",
-    backstory="Careful file system manager",
-    tools=[protected_file_writer]
-)`}</code>
+    def __init__(self, otp_client: AgentOTPClient, **kwargs):
+        super().__init__(**kwargs)
+        self.otp = otp_client
+        self.public_key, self.private_key = generate_key_pair()
+
+    def request_and_consume_otp(
+        self,
+        reason: str,
+        expected_sender: str = None,
+        sources: list = None,
+        timeout: int = 120
+    ) -> str:
+        """Request and consume an OTP, returning the code."""
+
+        filter_opts = {}
+        if sources:
+            filter_opts["sources"] = sources
+
+        request = self.otp.request_otp(
+            reason=reason,
+            expected_sender=expected_sender,
+            filter=filter_opts if filter_opts else None,
+            public_key=export_public_key(self.public_key),
+            wait_for_otp=True,
+            timeout=timeout
+        )
+
+        if request.status != "otp_received":
+            raise Exception(f"Failed to get OTP: {request.status}")
+
+        result = self.otp.consume_otp(request.id, self.private_key)
+        return result.code
+
+
+class EmailVerificationTool(OTPEnabledTool):
+    name: str = "Verify Email"
+    description: str = "Completes email verification for a service"
+
+    def _run(self, service_name: str, email: str) -> str:
+        # Trigger verification email (your implementation)
+        send_verification_email(service_name, email)
+
+        # Get the OTP
+        code = self.request_and_consume_otp(
+            reason=f"Email verification for {service_name}",
+            expected_sender=service_name,
+            sources=["email"]
+        )
+
+        # Submit the code (your implementation)
+        submit_verification_code(service_name, code)
+
+        return f"Email {email} verified for {service_name}"`}</code>
       </pre>
 
-      <h2>Crew-Level Permissions</h2>
+      <h2>Crew-Level OTP Management</h2>
 
       <p>
-        Request permissions at the crew level for batch operations:
+        Manage OTPs at the crew level for coordinated operations:
       </p>
 
       <pre className="language-python">
-        <code>{`from agent_otp.crewai import OTPCrew
+        <code>{`from agent_otp import AgentOTPClient, generate_key_pair
 
-class ProtectedCrew(OTPCrew):
-    def __init__(self, **kwargs):
-        super().__init__(
-            otp_client=otp,
+class OTPManagedCrew(Crew):
+    """A crew with centralized OTP management."""
+
+    def __init__(self, otp_client: AgentOTPClient, **kwargs):
+        super().__init__(**kwargs)
+        self.otp = otp_client
+        # Shared key pair for the crew
+        self.public_key, self.private_key = generate_key_pair()
+
+    def get_otp(self, reason: str, **kwargs) -> str:
+        """Centralized OTP retrieval for any crew member."""
+        from agent_otp import export_public_key
+
+        request = self.otp.request_otp(
+            reason=reason,
+            public_key=export_public_key(self.public_key),
+            wait_for_otp=True,
             **kwargs
         )
 
-    def before_kickoff(self):
-        """Request permission before crew starts."""
-        permission = self.otp_client.request_permission(
-            action="crew.execute",
-            scope={
-                "max_tasks": len(self.tasks),
-                "allowed_agents": [a.role for a in self.agents]
-            },
-            context={
-                "crew_name": "Research Crew",
-                "task_descriptions": [t.description for t in self.tasks]
-            },
-            wait_for_approval=True
-        )
+        if request.status == "otp_received":
+            result = self.otp.consume_otp(request.id, self.private_key)
+            return result.code
 
-        if permission.status != "approved":
-            raise PermissionError("Crew execution not approved")
+        raise Exception(f"Failed to get OTP: {request.status}")
 
-        self._permission = permission
 
-    def after_kickoff(self, result):
-        """Mark permission as used after completion."""
-        self.otp_client.use_token(
-            self._permission.id,
-            self._permission.token,
-            {"result_summary": str(result)[:500]}
-        )
+# Usage
+otp_client = AgentOTPClient(api_key="ak_live_xxxx")
 
-crew = ProtectedCrew(
-    agents=[research_agent, writer_agent],
-    tasks=[research_task, writing_task]
+crew = OTPManagedCrew(
+    otp_client=otp_client,
+    agents=[signup_agent, verification_agent],
+    tasks=[signup_task, verify_task],
+    verbose=True
 )
+
+# Any agent in the crew can now use crew.get_otp()
 result = crew.kickoff()`}</code>
       </pre>
 
-      <h2>Task-Level Permissions</h2>
+      <h2>Handling Multiple OTPs</h2>
 
       <p>
-        Add OTP checks to specific tasks:
+        For workflows that need multiple verifications:
       </p>
 
       <pre className="language-python">
-        <code>{`from agent_otp.crewai import otp_task
+        <code>{`class MultiServiceSignUpTool(OTPEnabledTool):
+    name: str = "Multi-Service Sign Up"
+    description: str = "Signs up for multiple services with OTP verification"
 
-@otp_task(
-    action="task.database_query",
-    scope={"max_queries": 5, "allowed_tables": ["users", "orders"]}
-)
-def create_database_task():
-    return Task(
-        description="Query the database for user statistics",
-        expected_output="Summary of user statistics",
-        agent=data_agent
-    )
+    def _run(self, services: list) -> str:
+        results = []
 
-# Or using the decorator on Task execution
-class OTPTask(Task):
-    def __init__(self, otp_action: str, otp_scope: dict, **kwargs):
-        super().__init__(**kwargs)
-        self.otp_action = otp_action
-        self.otp_scope = otp_scope
+        for service in services:
+            try:
+                # Start signup
+                start_signup(service["url"], service["email"])
 
-    def execute(self, context=None):
-        permission = otp.request_permission(
-            action=self.otp_action,
-            scope=self.otp_scope,
-            context={"task": self.description},
-            wait_for_approval=True
-        )
+                # Get OTP
+                code = self.request_and_consume_otp(
+                    reason=f"Sign up for {service['name']}",
+                    expected_sender=service["name"],
+                    sources=["email"]
+                )
 
-        if permission.status != "approved":
-            return f"Task not executed: {permission.reason}"
+                # Complete verification
+                complete_verification(service["url"], code)
+                results.append(f"{service['name']}: Success")
 
-        result = super().execute(context)
-        otp.use_token(permission.id, permission.token)
-        return result`}</code>
+            except Exception as e:
+                results.append(f"{service['name']}: Failed - {str(e)}")
+
+        return "\\n".join(results)`}</code>
       </pre>
 
-      <h2>Hierarchical Crews</h2>
-
-      <p>
-        Handle permissions in manager/worker hierarchies:
-      </p>
+      <h2>Error Handling</h2>
 
       <pre className="language-python">
-        <code>{`# Manager can approve worker operations
-manager_agent = Agent(
-    role="Project Manager",
-    goal="Coordinate team and approve sensitive operations",
-    backstory="Experienced manager with approval authority",
-    allow_delegation=True
+        <code>{`from agent_otp import (
+    OTPNotFoundError,
+    OTPExpiredError,
+    OTPAlreadyConsumedError,
+    OTPApprovalDeniedError,
+    RateLimitError,
 )
 
-# Workers request permissions through OTP
-worker_agent = Agent(
-    role="Data Analyst",
-    goal="Analyze data and generate reports",
-    backstory="Skilled analyst requiring approval for data access",
-    tools=[protected_data_tool]
-)
+class RobustOTPTool(OTPEnabledTool):
+    name: str = "Robust OTP Tool"
+    description: str = "Tool with comprehensive error handling"
 
-# Create hierarchical crew
-crew = Crew(
-    agents=[manager_agent, worker_agent],
-    tasks=[analysis_task],
-    process=Process.hierarchical,
-    manager_agent=manager_agent
-)`}</code>
-      </pre>
+    def _run(self, service: str, action: str) -> str:
+        try:
+            code = self.request_and_consume_otp(
+                reason=f"{action} for {service}",
+                expected_sender=service
+            )
+            return f"Success! Code: {code}"
 
-      <h2>Policy Configuration</h2>
+        except OTPApprovalDeniedError:
+            return "User denied the OTP request"
 
-      <p>
-        Configure policies for CrewAI operations:
-      </p>
+        except OTPExpiredError:
+            return "OTP request timed out - please try again"
 
-      <pre className="language-yaml">
-        <code>{`# Auto-approve read-only operations
-- name: "CrewAI read operations"
-  conditions:
-    action:
-      in: ["file.read", "web.search", "database.select"]
-    context.agent:
-      matches: "crewai_.*"
-  action: auto_approve
+        except OTPAlreadyConsumedError:
+            return "OTP was already used"
 
-# Require approval for external communications
-- name: "CrewAI external comms"
-  conditions:
-    action:
-      in: ["email.send", "slack.post", "api.call"]
-    context.agent:
-      matches: "crewai_.*"
-  action: require_approval
+        except RateLimitError as e:
+            return f"Rate limited - try again in {e.retry_after}s"
 
-# Rate limit per crew execution
-- name: "CrewAI rate limit"
-  conditions:
-    action:
-      starts_with: "crew."
-  action: auto_approve
-  scope_template:
-    max_operations_per_hour: 100`}</code>
-      </pre>
-
-      <h2>Async Crews</h2>
-
-      <p>
-        Use async patterns for non-blocking approval:
-      </p>
-
-      <pre className="language-python">
-        <code>{`import asyncio
-from agent_otp import AsyncAgentOTPClient
-
-async_otp = AsyncAgentOTPClient(api_key="ak_live_xxxx")
-
-class AsyncOTPTool(BaseTool):
-    name: str = "Async Protected Tool"
-    description: str = "Tool with async permission handling"
-
-    async def _arun(self, **kwargs) -> str:
-        permission = await async_otp.request_permission(
-            action="async.operation",
-            scope={},
-            wait_for_approval=True
-        )
-
-        if permission.status == "approved":
-            result = await self._async_operation(**kwargs)
-            await async_otp.use_token(permission.id, permission.token)
-            return result
-
-        return "Operation not approved"
-
-# Run async crew
-async def run_async_crew():
-    crew = Crew(agents=[...], tasks=[...])
-    result = await crew.kickoff_async()
-    return result
-
-asyncio.run(run_async_crew())`}</code>
+        except Exception as e:
+            return f"Unexpected error: {str(e)}"`}</code>
       </pre>
 
       <h2>See Also</h2>
 
       <ul>
         <li>
-          <Link href="/docs/sdk/python" className="text-primary hover:underline">
-            Python SDK Reference
+          <Link href="/docs/sdk/typescript" className="text-primary hover:underline">
+            TypeScript SDK Reference
+          </Link>
+        </li>
+        <li>
+          <Link href="/docs/concepts/how-it-works" className="text-primary hover:underline">
+            How Agent OTP Works
           </Link>
         </li>
         <li>
