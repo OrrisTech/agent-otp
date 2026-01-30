@@ -4,17 +4,191 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 
+**[English](./README.md) | [中文](./README.zh-CN.md)**
+
 A secure OTP Relay Service for AI Agents. Help your AI agents receive verification codes (SMS/email OTPs) securely with end-to-end encryption, user approval, and automatic deletion.
 
-## Overview
+## The Problem
 
-Agent OTP provides a security layer for AI agents that need to receive verification codes. Instead of giving agents direct access to SMS or email, Agent OTP enables:
+AI agents often need verification codes to complete tasks like signing up for services or logging in on behalf of users. Traditional approaches are risky:
+
+| Approach | Risk |
+|----------|------|
+| Give agent full email access | Agent can read ALL emails (banking, medical, personal) |
+| Forward all SMS to agent | Agent can intercept ALL messages (2FA, verification codes) |
+| User manually copy-pastes | Breaks automation, causes user fatigue |
+
+## The Solution
+
+Agent OTP provides a **secure relay** for verification codes:
 
 - **End-to-End Encryption**: OTPs encrypted with agent's public key - only the agent can decrypt
-- **User Approval**: Control which OTPs your agents can access
+- **User Approval**: You control which OTPs your agents can access
 - **One-Time Read**: OTPs auto-deleted after consumption
 - **Multi-Source Capture**: SMS (Android app), Email (Gmail/IMAP)
-- **Full Audit Trail**: Track every OTP request and access
+- **Minimal Exposure**: Agent only gets specific OTPs from approved senders
+
+## How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           User's Environment                            │
+│  ┌──────────────┐                              ┌──────────────────────┐ │
+│  │   Android    │  Capture SMS OTP             │   Email (Gmail)      │ │
+│  │   Phone App  │ ─────────────┐               │   Email Integration  │ │
+│  └──────────────┘              │               └──────────┬───────────┘ │
+│                                │                          │             │
+│                                ▼                          ▼             │
+│                    ┌─────────────────────────────────────────┐          │
+│                    │        Agent OTP Service                │          │
+│                    │  (Stores encrypted OTP, user approval)  │          │
+│                    └─────────────────┬───────────────────────┘          │
+│                                      │                                  │
+│                                      │ User approves via Telegram/Web   │
+│                                      │                                  │
+└──────────────────────────────────────┼──────────────────────────────────┘
+                                       │
+                                       │ Encrypted OTP
+                                       ▼
+                             ┌──────────────────┐
+                             │    AI Agent      │
+                             │ (Decrypts with   │
+                             │  private key)    │
+                             └──────────────────┘
+```
+
+### Step-by-Step Flow
+
+#### 1. Agent Generates Key Pair
+
+The agent generates an RSA key pair. The private key stays with the agent, public key is sent to Agent OTP:
+
+```typescript
+import { generateKeyPair, exportPublicKey } from '@orrisai/agent-otp-sdk';
+
+// Generate key pair (once per agent session)
+const { publicKey, privateKey } = await generateKeyPair();
+
+// Private key stored locally, NEVER sent out
+```
+
+#### 2. Agent Requests OTP
+
+When the agent needs a verification code (e.g., signing up for a service):
+
+```typescript
+const client = new AgentOTPClient({ apiKey: 'ak_xxx' });
+
+const request = await client.requestOTP({
+  reason: 'Sign up for Acme website',      // Tell user why
+  expectedSender: 'Acme',                   // Expected sender
+  filter: {
+    sources: ['email'],                     // Only email OTPs
+    senderPattern: '*@acme.com',            // Only from acme.com
+  },
+  publicKey: await exportPublicKey(publicKey),
+  waitForOTP: true,
+  timeout: 120000,
+});
+```
+
+#### 3. User Receives Approval Request
+
+User gets notified via Telegram Bot or Dashboard:
+
+```
+🔔 Agent Requests OTP Access
+
+Reason: Sign up for Acme website
+Expected Sender: Acme
+Source: Email
+
+[✅ Approve]  [❌ Deny]
+```
+
+#### 4. System Waits for OTP
+
+After user approves, Agent OTP monitors for the OTP:
+
+- **SMS**: Android App listens for SMS matching `senderPattern`
+- **Email**: Email integration monitors inbox for matching sender
+
+#### 5. OTP Captured and Encrypted
+
+When Acme sends the verification email:
+
+```
+From: noreply@acme.com
+Subject: Your verification code
+Body: Your code is 847291
+```
+
+Agent OTP service:
+1. Captures the email
+2. Extracts code `847291`
+3. **Encrypts with agent's public key** (only agent can decrypt)
+4. Stores encrypted data
+
+#### 6. Agent Consumes OTP
+
+```typescript
+if (request.status === 'otp_received') {
+  // Decrypt with private key
+  const { code } = await client.consumeOTP(request.id, privateKey);
+
+  console.log('OTP:', code);  // 847291
+
+  // Use the code
+  await completeRegistration(code);
+}
+```
+
+#### 7. OTP Auto-Deleted
+
+After consumption, OTP is immediately deleted from server. Cannot be read again.
+
+## Security Design
+
+| Feature | Implementation |
+|---------|----------------|
+| **End-to-End Encryption** | OTP encrypted with agent's public key, only private key holder can decrypt |
+| **Server Cannot Read** | Server stores encrypted data, cannot read plaintext codes |
+| **User Approval** | Every OTP request requires explicit user approval |
+| **One-Time Read** | Deleted immediately after consumption, no replay possible |
+| **Minimal Exposure** | Agent only gets specific OTPs from approved senders, not all messages |
+
+## Implementation Status
+
+> Last updated: 2025-01-30
+
+| Component | Status | Description |
+|-----------|--------|-------------|
+| **TypeScript SDK** | ✅ Complete | `requestOTP()`, `consumeOTP()`, crypto utilities |
+| **Shared Package** | ✅ Complete | Types, constants, Zod schemas |
+| **API Service** | ⚠️ Partial | Route structure exists, some endpoints are placeholders |
+| **Documentation Website** | ✅ Complete | 35 pages with full documentation |
+| **Telegram Bot** | ❌ Not Started | User approval notifications |
+| **Android App (React Native)** | ❌ Not Started | SMS OTP capture |
+| **Email Integration** | ❌ Not Started | Gmail/IMAP OTP capture |
+| **Web Dashboard** | ❌ Not Started | Web-based approval and management |
+
+### What Works Now
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  AI Agent  ←──→  SDK  ←──→  API Service  ←──→  Database     │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### What's Missing
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Android App (SMS capture)                                   │
+│  Email Integration (email capture)                           │
+│  Telegram Bot / Dashboard (user approval)                    │
+└──────────────────────────────────────────────────────────────┘
+```
 
 ## Quick Start
 
@@ -47,7 +221,7 @@ const client = new AgentOTPClient({
   apiKey: process.env.AGENT_OTP_API_KEY,
 });
 
-// Generate encryption keys (store private key securely)
+// Generate encryption keys
 const { publicKey, privateKey } = await generateKeyPair();
 
 // Request an OTP
@@ -59,45 +233,15 @@ const request = await client.requestOTP({
     senderPattern: '*@acme.com',
   },
   publicKey: await exportPublicKey(publicKey),
-  waitForOTP: true,  // Block until OTP arrives or timeout
-  timeout: 120000,   // 2 minutes
+  waitForOTP: true,
+  timeout: 120000,
 });
 
-// Consume the OTP (one-time read, then deleted)
+// Consume the OTP
 if (request.status === 'otp_received') {
   const { code } = await client.consumeOTP(request.id, privateKey);
   console.log('Received OTP:', code);
 }
-```
-
-## How It Works
-
-```
-┌──────────────┐     1. Request OTP        ┌──────────────┐
-│   AI Agent   │ ─────────────────────────►│  Agent OTP   │
-│   + SDK      │   (with public key)       │     API      │
-└──────────────┘                           └──────────────┘
-       │                                          │
-       │                                          │ 2. Notify User
-       │                                          │    for Approval
-       │                                          ▼
-       │                                   ┌──────────────┐
-       │                                   │  User Device │
-       │                                   │  (Telegram)  │
-       │                                   └──────────────┘
-       │                                          │
-       │                    3. User Approves      │
-       │ ◄────────────────────────────────────────┤
-       │                                          │
-       │         4. OTP Captured (SMS/Email)      │
-       │ ◄────────────────────────────────────────┤
-       │         (encrypted with public key)      │
-       │                                          │
-       ▼                                          │
-┌──────────────┐     5. Consume OTP        ┌──────────────┐
-│    Agent     │ ─────────────────────────►│   Decrypt    │
-│  Decrypts    │   (one-time read)         │  & Delete    │
-└──────────────┘                           └──────────────┘
 ```
 
 ## OTP Request States
@@ -112,6 +256,23 @@ if (request.status === 'otp_received') {
 | `expired` | Request expired before completion |
 | `cancelled` | Request was cancelled |
 
+## Project Structure
+
+```
+agent-otp/
+├── apps/
+│   ├── api/              # Main API service (Hono + Cloudflare Workers)
+│   ├── website/          # Documentation website (Next.js)
+│   ├── dashboard/        # Web Dashboard (Next.js) - Coming soon
+│   ├── telegram-bot/     # Telegram approval bot - Coming soon
+│   └── mobile/           # React Native SMS app - Coming soon
+├── packages/
+│   ├── sdk/              # TypeScript SDK
+│   └── shared/           # Shared types and utilities
+├── docs/                 # Internal documentation
+└── docker-compose.yml    # Local development setup
+```
+
 ## Documentation
 
 Full documentation is available at [agentotp.com/docs](https://agentotp.com/docs).
@@ -122,22 +283,6 @@ Full documentation is available at [agentotp.com/docs](https://agentotp.com/docs
 - [End-to-End Encryption](https://agentotp.com/docs/concepts/encryption)
 - [OTP Sources](https://agentotp.com/docs/concepts/sources)
 
-## Project Structure
-
-```
-agent-otp/
-├── apps/
-│   ├── api/              # Main API service (Hono + Cloudflare Workers)
-│   ├── website/          # Documentation website (Next.js)
-│   ├── dashboard/        # Web Dashboard (Next.js) - Coming soon
-│   └── telegram-bot/     # Telegram approval bot - Coming soon
-├── packages/
-│   ├── sdk/              # TypeScript SDK
-│   └── shared/           # Shared types and utilities
-├── docs/                 # Internal documentation
-└── docker-compose.yml    # Local development setup
-```
-
 ## Local Development
 
 ### Prerequisites
@@ -147,30 +292,12 @@ agent-otp/
 
 ### Setup
 
-1. Clone the repository:
 ```bash
 git clone https://github.com/orristech/agent-otp.git
 cd agent-otp
-```
-
-2. Install dependencies:
-```bash
 bun install
-```
-
-3. Start the local database and Redis:
-```bash
 docker compose up -d
-```
-
-4. Copy environment variables:
-```bash
 cp .env.example .env
-# Edit .env with your configuration
-```
-
-5. Start the development server:
-```bash
 bun dev
 ```
 
@@ -179,14 +306,9 @@ The API will be available at `http://localhost:8787`.
 ### Running Tests
 
 ```bash
-# Run all tests
-bun test
-
-# Run tests with coverage
-bun test:coverage
-
-# Run tests for a specific package
-bun test --filter @orrisai/agent-otp-sdk
+bun test              # Run all tests
+bun test --run        # Single run (no watch)
+bun test:coverage     # With coverage
 ```
 
 ## SDK API Reference
@@ -194,96 +316,24 @@ bun test --filter @orrisai/agent-otp-sdk
 ### Client Methods
 
 ```typescript
-// Create a new OTP request
 requestOTP(options: RequestOTPOptions): Promise<OTPRequestResult>
-
-// Check request status
 getOTPStatus(requestId: string): Promise<OTPStatus>
-
-// Consume OTP (one-time read, then deleted)
 consumeOTP(requestId: string, privateKey: CryptoKey): Promise<OTPConsumeResult>
-
-// Cancel a pending request
 cancelOTPRequest(requestId: string): Promise<void>
 ```
 
 ### Crypto Utilities
 
 ```typescript
-// Generate RSA-OAEP key pair for E2E encryption
 generateKeyPair(): Promise<CryptoKeyPair>
-
-// Export public key for transmission
 exportPublicKey(key: CryptoKey): Promise<string>
-
-// Import private key from stored data
 importPrivateKey(keyData: string): Promise<CryptoKey>
-
-// Decrypt received OTP payload
 decryptOTPPayload(encrypted: string, privateKey: CryptoKey): Promise<string>
 ```
-
-### Request Options
-
-```typescript
-interface RequestOTPOptions {
-  reason: string;              // Why agent needs OTP
-  expectedSender?: string;     // Hint for which OTP to capture
-  filter?: {
-    sources?: ('sms' | 'email' | 'whatsapp')[];
-    senderPattern?: string;    // Glob pattern: '*@acme.com'
-  };
-  publicKey: string;           // Agent's RSA public key
-  ttl?: number;                // Request TTL in seconds (default: 300)
-  waitForOTP?: boolean;        // Block until OTP arrives
-  timeout?: number;            // Wait timeout in ms (default: 120000)
-}
-```
-
-## Security
-
-### Encryption
-
-- **Algorithm**: RSA-OAEP with 2048-bit keys
-- **Hash**: SHA-256
-- **Implementation**: Web Crypto API (browser-native)
-
-### Best Practices
-
-- **Never commit secrets**: All sensitive configuration should be in `.env` files
-- **Store private keys securely**: Agent private keys should be encrypted at rest
-- **Use environment variables**: API keys should always be in environment variables
-- **Rotate API keys**: Regularly rotate your Agent OTP API keys
-
-### Reporting Vulnerabilities
-
-If you discover a security vulnerability, please email security@agentotp.com. Do not open public issues for security vulnerabilities.
-
-## Roadmap
-
-- [x] TypeScript SDK with E2E encryption
-- [x] Core API with OTP request/consume
-- [x] Documentation website
-- [ ] Android SMS capture app
-- [ ] Email integration (Gmail/IMAP)
-- [ ] Web Dashboard
-- [ ] Telegram Bot for approvals
-- [ ] Python SDK
-- [ ] LangChain integration
-- [ ] CrewAI integration
 
 ## Contributing
 
 Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Make your changes
-4. Run tests: `bun test`
-5. Commit with a descriptive message
-6. Push and open a Pull Request
 
 ## License
 
