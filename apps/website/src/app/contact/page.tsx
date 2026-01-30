@@ -1,15 +1,57 @@
-import type { Metadata } from 'next';
+'use client';
+
+import * as React from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { Button } from '@/components/ui/button';
 
-export const metadata: Metadata = {
-  title: 'Contact',
-  description: 'Get in touch with the Agent OTP team. Contact us for sales inquiries, enterprise features, or technical support.',
-};
+type FormStatus = 'idle' | 'submitting' | 'success' | 'error';
 
 export default function ContactPage() {
+  const [status, setStatus] = React.useState<FormStatus>('idle');
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const formRef = React.useRef<HTMLFormElement>(null);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus('submitting');
+    setErrorMessage(null);
+
+    const formData = new FormData(event.currentTarget);
+    const data = {
+      name: formData.get('name') as string,
+      email: formData.get('email') as string,
+      company: formData.get('company') as string,
+      subject: formData.get('subject') as string,
+      message: formData.get('message') as string,
+    };
+
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to send message');
+      }
+
+      setStatus('success');
+      formRef.current?.reset();
+    } catch (error) {
+      setStatus('error');
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Failed to send message'
+      );
+    }
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
@@ -28,80 +70,154 @@ export default function ContactPage() {
             {/* Contact Form */}
             <div className="rounded-2xl border border-border p-8">
               <h2 className="text-xl font-semibold mb-6">Send us a message</h2>
-              <form className="space-y-6">
-                <div>
-                  <label
-                    htmlFor="name"
-                    className="block text-sm font-medium mb-2"
+
+              {status === 'success' ? (
+                <div className="text-center py-8">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100 mb-4">
+                    <svg
+                      className="h-6 w-6 text-green-600"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">Message sent!</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Thank you for reaching out. We&apos;ll get back to you within
+                    24-48 hours.
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => setStatus('idle')}
                   >
-                    Name
-                  </label>
-                  <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    required
-                    className="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    placeholder="Your name"
-                  />
+                    Send another message
+                  </Button>
                 </div>
-                <div>
-                  <label
-                    htmlFor="email"
-                    className="block text-sm font-medium mb-2"
+              ) : (
+                <form
+                  ref={formRef}
+                  onSubmit={handleSubmit}
+                  className="space-y-6"
+                >
+                  {status === 'error' && errorMessage && (
+                    <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                      {errorMessage}
+                    </div>
+                  )}
+
+                  <div>
+                    <label
+                      htmlFor="name"
+                      className="block text-sm font-medium mb-2"
+                    >
+                      Name <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="name"
+                      name="name"
+                      required
+                      minLength={2}
+                      disabled={status === 'submitting'}
+                      className="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                      placeholder="Your name"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="email"
+                      className="block text-sm font-medium mb-2"
+                    >
+                      Email <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      id="email"
+                      name="email"
+                      required
+                      disabled={status === 'submitting'}
+                      className="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                      placeholder="you@example.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="company"
+                      className="block text-sm font-medium mb-2"
+                    >
+                      Company <span className="text-muted-foreground text-xs">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="company"
+                      name="company"
+                      disabled={status === 'submitting'}
+                      className="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                      placeholder="Your company"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="subject"
+                      className="block text-sm font-medium mb-2"
+                    >
+                      Subject <span className="text-destructive">*</span>
+                    </label>
+                    <select
+                      id="subject"
+                      name="subject"
+                      required
+                      disabled={status === 'submitting'}
+                      className="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <option value="">Select a topic</option>
+                      <option value="Sales inquiry">Sales inquiry</option>
+                      <option value="Enterprise features">Enterprise features</option>
+                      <option value="Technical support">Technical support</option>
+                      <option value="Partnership opportunity">Partnership opportunity</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="message"
+                      className="block text-sm font-medium mb-2"
+                    >
+                      Message <span className="text-destructive">*</span>
+                    </label>
+                    <textarea
+                      id="message"
+                      name="message"
+                      rows={5}
+                      required
+                      minLength={10}
+                      disabled={status === 'submitting'}
+                      className="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+                      placeholder="How can we help?"
+                    />
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={status === 'submitting'}
                   >
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    required
-                    className="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    placeholder="you@example.com"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="subject"
-                    className="block text-sm font-medium mb-2"
-                  >
-                    Subject
-                  </label>
-                  <select
-                    id="subject"
-                    name="subject"
-                    required
-                    className="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <option value="">Select a topic</option>
-                    <option value="sales">Sales inquiry</option>
-                    <option value="enterprise">Enterprise features</option>
-                    <option value="support">Technical support</option>
-                    <option value="partnership">Partnership opportunity</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label
-                    htmlFor="message"
-                    className="block text-sm font-medium mb-2"
-                  >
-                    Message
-                  </label>
-                  <textarea
-                    id="message"
-                    name="message"
-                    rows={5}
-                    required
-                    className="w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
-                    placeholder="How can we help?"
-                  />
-                </div>
-                <Button type="submit" className="w-full">
-                  Send Message
-                </Button>
-              </form>
+                    {status === 'submitting' ? 'Sending...' : 'Send Message'}
+                  </Button>
+                </form>
+              )}
             </div>
 
             {/* Contact Info */}
@@ -148,7 +264,7 @@ export default function ContactPage() {
                     rel="noopener noreferrer"
                     className="flex items-center gap-3 text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path
                         fillRule="evenodd"
                         d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
@@ -163,7 +279,7 @@ export default function ContactPage() {
                     rel="noopener noreferrer"
                     className="flex items-center gap-3 text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
                     </svg>
                     Discord
@@ -174,7 +290,7 @@ export default function ContactPage() {
                     rel="noopener noreferrer"
                     className="flex items-center gap-3 text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
                     </svg>
                     Twitter / X

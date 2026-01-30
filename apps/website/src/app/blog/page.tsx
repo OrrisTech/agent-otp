@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
+import { NewsletterForm } from '@/components/newsletter-form';
 
 export const metadata: Metadata = {
   title: 'Blog',
@@ -101,26 +102,7 @@ export default function BlogPage() {
             <p className="text-muted-foreground">
               More articles coming soon. Subscribe to our newsletter to stay updated.
             </p>
-            <form className="mt-6 flex max-w-md mx-auto gap-x-4">
-              <label htmlFor="email-address" className="sr-only">
-                Email address
-              </label>
-              <input
-                id="email-address"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                className="min-w-0 flex-auto rounded-lg border border-input bg-background px-3.5 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                placeholder="Enter your email"
-              />
-              <button
-                type="submit"
-                className="flex-none rounded-lg bg-primary px-3.5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-              >
-                Subscribe
-              </button>
-            </form>
+            <NewsletterForm />
           </div>
         </div>
       </main>
