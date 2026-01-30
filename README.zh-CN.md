@@ -167,8 +167,8 @@ if (request.status === 'otp_received') {
 | **API 服务** | ⚠️ 部分完成 | 路由结构存在，部分端点是占位符 |
 | **文档网站** | ✅ 已完成 | 35 个页面，完整文档 |
 | **Telegram Bot** | ✅ 已完成 | 使用 Grammy 框架的用户审批通知 |
+| **Email 集成** | ✅ 已完成 | Gmail API 支持，OTP 提取 |
 | **Android App (React Native)** | ❌ 未开始 | 短信 OTP 捕获 |
-| **Email 集成** | ❌ 未开始 | Gmail/IMAP OTP 捕获 |
 | **Web Dashboard** | ❌ 未开始 | Web 端审批和管理 |
 
 ### 当前已实现

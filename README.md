@@ -168,8 +168,8 @@ After consumption, OTP is immediately deleted from server. Cannot be read again.
 | **API Service** | ⚠️ Partial | Route structure exists, some endpoints are placeholders |
 | **Documentation Website** | ✅ Complete | 35 pages with full documentation |
 | **Telegram Bot** | ✅ Complete | User approval notifications via Grammy |
+| **Email Integration** | ✅ Complete | Gmail API support, OTP extraction |
 | **Android App (React Native)** | ❌ Not Started | SMS OTP capture |
-| **Email Integration** | ❌ Not Started | Gmail/IMAP OTP capture |
 | **Web Dashboard** | ❌ Not Started | Web-based approval and management |
 
 ### What Works Now
