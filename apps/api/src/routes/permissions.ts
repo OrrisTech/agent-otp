@@ -160,4 +160,76 @@ permissions.delete('/:id', async (c) => {
   return c.body(null, HTTP_STATUS.NO_CONTENT);
 });
 
+/**
+ * POST /api/v1/otp/:id/approve
+ * Approve an OTP request (called by Telegram bot or dashboard).
+ */
+permissions.post('/:id/approve', async (c) => {
+  const agent = c.get('agent');
+  const db = c.get('db');
+  const id = c.req.param('id');
+
+  const auditService = createAuditService(db);
+
+  // Log the approval
+  await auditService.log({
+    userId: agent.userId,
+    agentId: agent.id,
+    permissionRequestId: id,
+    eventType: AUDIT_EVENT_TYPE.OTP_APPROVE,
+    details: {
+      approvedAt: new Date().toISOString(),
+    },
+  });
+
+  // TODO: Implement actual approval in database
+  // 1. Update request status to 'approved'
+  // 2. Start listening for incoming OTPs
+
+  return c.json(
+    createApiResponse({
+      success: true,
+      message: 'OTP request approved',
+      requestId: id,
+      status: OTP_REQUEST_STATUS.APPROVED,
+    })
+  );
+});
+
+/**
+ * POST /api/v1/otp/:id/deny
+ * Deny an OTP request (called by Telegram bot or dashboard).
+ */
+permissions.post('/:id/deny', async (c) => {
+  const agent = c.get('agent');
+  const db = c.get('db');
+  const id = c.req.param('id');
+
+  const auditService = createAuditService(db);
+
+  // Log the denial
+  await auditService.log({
+    userId: agent.userId,
+    agentId: agent.id,
+    permissionRequestId: id,
+    eventType: AUDIT_EVENT_TYPE.OTP_DENY,
+    details: {
+      deniedAt: new Date().toISOString(),
+    },
+  });
+
+  // TODO: Implement actual denial in database
+  // 1. Update request status to 'denied'
+  // 2. Notify the waiting agent
+
+  return c.json(
+    createApiResponse({
+      success: true,
+      message: 'OTP request denied',
+      requestId: id,
+      status: OTP_REQUEST_STATUS.DENIED,
+    })
+  );
+});
+
 export { permissions };
