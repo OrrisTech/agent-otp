@@ -167,7 +167,7 @@ After consumption, OTP is immediately deleted from server. Cannot be read again.
 | **Shared Package** | ✅ Complete | Types, constants, Zod schemas |
 | **API Service** | ⚠️ Partial | Route structure exists, some endpoints are placeholders |
 | **Documentation Website** | ✅ Complete | 35 pages with full documentation |
-| **Telegram Bot** | ❌ Not Started | User approval notifications |
+| **Telegram Bot** | ✅ Complete | User approval notifications via Grammy |
 | **Android App (React Native)** | ❌ Not Started | SMS OTP capture |
 | **Email Integration** | ❌ Not Started | Gmail/IMAP OTP capture |
 | **Web Dashboard** | ❌ Not Started | Web-based approval and management |

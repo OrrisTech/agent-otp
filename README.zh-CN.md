@@ -166,7 +166,7 @@ if (request.status === 'otp_received') {
 | **Shared 包** | ✅ 已完成 | 类型定义、常量、Zod schemas |
 | **API 服务** | ⚠️ 部分完成 | 路由结构存在，部分端点是占位符 |
 | **文档网站** | ✅ 已完成 | 35 个页面，完整文档 |
-| **Telegram Bot** | ❌ 未开始 | 用户审批通知 |
+| **Telegram Bot** | ✅ 已完成 | 使用 Grammy 框架的用户审批通知 |
 | **Android App (React Native)** | ❌ 未开始 | 短信 OTP 捕获 |
 | **Email 集成** | ❌ 未开始 | Gmail/IMAP OTP 捕获 |
 | **Web Dashboard** | ❌ 未开始 | Web 端审批和管理 |
