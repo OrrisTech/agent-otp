@@ -1,6 +1,6 @@
 {
   "name": "@orrisai/agent-otp-shared",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shared types, schemas, and constants for Agent OTP",
   "type": "module",
   "repository": {
@@ -11,7 +11,13 @@
   "homepage": "https://agentotp.com/docs",
   "license": "MIT",
   "author": "Agent OTP Team",
-  "keywords": ["agent", "otp", "permission", "ai", "types"],
+  "keywords": [
+    "agent",
+    "otp",
+    "permission",
+    "ai",
+    "types"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
