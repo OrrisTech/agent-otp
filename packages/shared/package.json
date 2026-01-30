@@ -5,7 +5,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/orrisai/agent-otp.git",
+    "url": "https://github.com/orristech/agent-otp.git",
     "directory": "packages/shared"
   },
   "homepage": "https://agentotp.com/docs",

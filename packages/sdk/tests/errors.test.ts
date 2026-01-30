@@ -15,6 +15,9 @@ import {
   PermissionExpiredError,
   InvalidTokenError,
   NetworkError,
+  ServerError,
+  TokenUsedError,
+  TokenRevokedError,
   errorFromStatus,
 } from '../src/errors';
 
@@ -186,6 +189,51 @@ describe('Error Classes', () => {
       expect(error.details).toEqual({ cause: 'Connection refused' });
     });
   });
+
+  describe('ServerError', () => {
+    it('should use default values', () => {
+      const error = new ServerError();
+      expect(error.message).toBe('Server error');
+      expect(error.code).toBe('SERVER_ERROR');
+      expect(error.status).toBe(500);
+      expect(error.name).toBe('ServerError');
+    });
+
+    it('should accept custom status and requestId', () => {
+      const error = new ServerError('Bad Gateway', 502, 'req_123');
+      expect(error.status).toBe(502);
+      expect(error.requestId).toBe('req_123');
+    });
+  });
+
+  describe('TokenUsedError', () => {
+    it('should use default message', () => {
+      const error = new TokenUsedError();
+      expect(error.message).toBe('Token has already been used');
+      expect(error.code).toBe('TOKEN_USED');
+      expect(error.name).toBe('TokenUsedError');
+    });
+
+    it('should accept usedAt timestamp', () => {
+      const usedAt = '2024-01-01T00:00:00Z';
+      const error = new TokenUsedError('Token used', usedAt);
+      expect(error.usedAt).toBe(usedAt);
+    });
+  });
+
+  describe('TokenRevokedError', () => {
+    it('should use default message', () => {
+      const error = new TokenRevokedError();
+      expect(error.message).toBe('Token has been revoked');
+      expect(error.code).toBe('TOKEN_REVOKED');
+      expect(error.name).toBe('TokenRevokedError');
+    });
+
+    it('should accept revokedBy', () => {
+      const error = new TokenRevokedError('Token revoked', 'admin@example.com');
+      expect(error.revokedBy).toBe('admin@example.com');
+    });
+  });
 });
 
 describe('errorFromStatus', () => {
@@ -219,16 +267,23 @@ describe('errorFromStatus', () => {
     expect(error).toBeInstanceOf(RateLimitError);
   });
 
-  it('should return generic AgentOTPError for other status codes', () => {
+  it('should return ServerError for 5xx status codes', () => {
     const error = errorFromStatus(500, 'Internal Server Error');
-    expect(error).toBeInstanceOf(AgentOTPError);
-    expect(error.code).toBe('API_ERROR');
-    expect(error.details).toEqual({ status: 500, details: undefined });
+    expect(error).toBeInstanceOf(ServerError);
+    expect(error.code).toBe('SERVER_ERROR');
+    expect((error as ServerError).status).toBe(500);
   });
 
-  it('should include details in generic error', () => {
-    const details = { trace: 'abc123' };
+  it('should include requestId in ServerError from details', () => {
+    const details = { requestId: 'req_abc123' };
     const error = errorFromStatus(502, 'Bad Gateway', details);
-    expect(error.details).toEqual({ status: 502, details });
+    expect(error).toBeInstanceOf(ServerError);
+    expect((error as ServerError).requestId).toBe('req_abc123');
+  });
+
+  it('should return generic AgentOTPError for other 4xx status codes', () => {
+    const error = errorFromStatus(418, "I'm a teapot");
+    expect(error).toBeInstanceOf(AgentOTPError);
+    expect(error.code).toBe('API_ERROR');
   });
 });

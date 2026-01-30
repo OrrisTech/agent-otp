@@ -61,6 +61,9 @@ export {
   PermissionExpiredError,
   InvalidTokenError,
   NetworkError,
+  ServerError,
+  TokenUsedError,
+  TokenRevokedError,
 } from './errors';
 
 // Re-export useful constants

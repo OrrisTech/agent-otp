@@ -126,6 +126,46 @@ export class NetworkError extends AgentOTPError {
 }
 
 /**
+ * Error thrown when the server returns a 5xx error.
+ */
+export class ServerError extends AgentOTPError {
+  constructor(
+    message = 'Server error',
+    public readonly status: number = 500,
+    public readonly requestId?: string
+  ) {
+    super(message, 'SERVER_ERROR', { status, requestId });
+    this.name = 'ServerError';
+  }
+}
+
+/**
+ * Error thrown when a token has already been used.
+ */
+export class TokenUsedError extends AgentOTPError {
+  constructor(
+    message = 'Token has already been used',
+    public readonly usedAt?: string
+  ) {
+    super(message, 'TOKEN_USED', { usedAt });
+    this.name = 'TokenUsedError';
+  }
+}
+
+/**
+ * Error thrown when a token has been revoked.
+ */
+export class TokenRevokedError extends AgentOTPError {
+  constructor(
+    message = 'Token has been revoked',
+    public readonly revokedBy?: string
+  ) {
+    super(message, 'TOKEN_REVOKED', { revokedBy });
+    this.name = 'TokenRevokedError';
+  }
+}
+
+/**
  * Maps HTTP status codes to appropriate error classes.
  */
 export function errorFromStatus(
@@ -145,6 +185,10 @@ export function errorFromStatus(
     case 429:
       return new RateLimitError(message);
     default:
+      // Handle 5xx server errors
+      if (status >= 500 && status < 600) {
+        return new ServerError(message, status, details?.requestId as string | undefined);
+      }
       return new AgentOTPError(message, 'API_ERROR', { status, details });
   }
 }
