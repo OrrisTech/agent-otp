@@ -8,12 +8,12 @@
 import { webcrypto } from 'node:crypto';
 
 // Use Node.js Web Crypto API
-const crypto = webcrypto as unknown as Crypto;
+const crypto = webcrypto;
 
 /**
  * Import a public key from base64-encoded SPKI format
  */
-export async function importPublicKey(publicKeyBase64: string): Promise<CryptoKey> {
+export async function importPublicKey(publicKeyBase64: string): Promise<webcrypto.CryptoKey> {
   const keyData = Buffer.from(publicKeyBase64, 'base64');
 
   return crypto.subtle.importKey(

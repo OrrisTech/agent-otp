@@ -3,7 +3,7 @@
  */
 
 import type { Env } from '../lib/env';
-import type { TelegramApprovalRequest } from '@orrisai/agent-otp-shared';
+import type { TelegramOTPApprovalRequest } from '@orrisai/agent-otp-shared';
 
 interface NotificationResult {
   success: boolean;
@@ -28,7 +28,7 @@ export class NotificationService {
    */
   async sendTelegramApproval(
     chatId: number,
-    request: TelegramApprovalRequest
+    request: TelegramOTPApprovalRequest
   ): Promise<NotificationResult> {
     if (!this.telegramBotToken) {
       return {
@@ -44,7 +44,7 @@ export class NotificationService {
     );
 
     // Build approval URL
-    const approvalUrl = `${this.dashboardUrl}/approve/${request.permissionRequestId}`;
+    const approvalUrl = `${this.dashboardUrl}/approve/${request.otpRequestId}`;
 
     // Format the message
     const message = this.formatTelegramMessage(request, expiresInMinutes);
@@ -55,11 +55,11 @@ export class NotificationService {
         [
           {
             text: '✅ Approve',
-            callback_data: `approve:${request.permissionRequestId}`,
+            callback_data: `approve:${request.otpRequestId}`,
           },
           {
             text: '❌ Deny',
-            callback_data: `deny:${request.permissionRequestId}`,
+            callback_data: `deny:${request.otpRequestId}`,
           },
         ],
         [
@@ -173,32 +173,15 @@ export class NotificationService {
    * Formats a Telegram message for approval request.
    */
   private formatTelegramMessage(
-    request: TelegramApprovalRequest,
+    request: TelegramOTPApprovalRequest,
     expiresInMinutes: number
   ): string {
-    const scopeStr = Object.entries(request.scope)
-      .map(([k, v]) => `  • ${k}: ${JSON.stringify(v)}`)
-      .join('\n');
-
-    const contextStr = Object.entries(request.context)
-      .filter(([_, v]) => v !== undefined && v !== null)
-      .map(([k, v]) => `  • ${k}: ${v}`)
-      .join('\n');
-
-    let message = `🔐 <b>Permission Request</b>\n\n`;
+    let message = `🔐 <b>OTP Access Request</b>\n\n`;
     message += `<b>Agent:</b> ${this.escapeHtml(request.agentName)}\n`;
-    message += `<b>Action:</b> ${this.escapeHtml(request.action)}\n`;
+    message += `<b>Reason:</b> ${this.escapeHtml(request.reason)}\n`;
 
-    if (request.resource) {
-      message += `<b>Resource:</b> ${this.escapeHtml(request.resource)}\n`;
-    }
-
-    if (scopeStr) {
-      message += `\n<b>Scope:</b>\n${this.escapeHtml(scopeStr)}\n`;
-    }
-
-    if (contextStr) {
-      message += `\n<b>Context:</b>\n${this.escapeHtml(contextStr)}\n`;
+    if (request.expectedSender) {
+      message += `<b>Expected From:</b> ${this.escapeHtml(request.expectedSender)}\n`;
     }
 
     message += `\n⏰ Expires in: ${expiresInMinutes} minute${expiresInMinutes !== 1 ? 's' : ''}`;

@@ -34,6 +34,8 @@ export const REDIS_KEYS = {
   WS_SESSION: 'ws:',
   // Agent session: agent_session:{agent_id} -> session data
   AGENT_SESSION: 'agent_session:',
+  // OTP payload storage: otp:{request_id} -> encrypted OTP data
+  OTP: 'otp:',
 } as const;
 
 /**

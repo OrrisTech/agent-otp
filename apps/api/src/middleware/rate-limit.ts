@@ -33,7 +33,7 @@ export function rateLimitMiddleware(config: RateLimitConfig = {}) {
       getEnvVarAsNumber(
         env,
         'RATE_LIMIT_REQUESTS',
-        RATE_LIMIT_DEFAULTS.REQUESTS_PER_WINDOW
+        RATE_LIMIT_DEFAULTS.OTP_REQUESTS_PER_MINUTE
       );
 
     const windowMs =
@@ -41,7 +41,7 @@ export function rateLimitMiddleware(config: RateLimitConfig = {}) {
       getEnvVarAsNumber(
         env,
         'RATE_LIMIT_WINDOW_MS',
-        RATE_LIMIT_DEFAULTS.WINDOW_MS
+        60000 // 1 minute default window
       );
 
     // Extract rate limit key (default: IP address or agent ID)
