@@ -12,9 +12,9 @@
     "dev:api": "bun run --filter @orrisai/agent-otp-api dev",
     "dev:website": "bun run --filter @orrisai/agent-otp-website dev",
     "build": "bun run --filter '*' build",
-    "test": "bun run --filter '*' test",
+    "test": "bun run --filter @orrisai/agent-otp-shared build && bun run --filter '*' test",
     "lint": "bun run --filter '*' lint",
-    "typecheck": "bun run --filter '*' typecheck",
+    "typecheck": "bun run --filter @orrisai/agent-otp-shared build && bun run --filter '*' typecheck",
     "db:migrate": "bun run --filter @orrisai/agent-otp-api db:migrate",
     "db:generate": "bun run --filter @orrisai/agent-otp-api db:generate",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules"
