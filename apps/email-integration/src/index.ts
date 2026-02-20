@@ -10,7 +10,7 @@
  */
 
 import { config } from './config.js';
-import { GmailWatcher, type GmailTokens, type MatchedOTP, type PendingOTPRequest } from './services/gmail-watcher.js';
+import { GmailWatcher, type MatchedOTP, type PendingOTPRequest } from './services/gmail-watcher.js';
 import { apiClient } from './services/api.js';
 import { createEncryptedPayload } from './services/encryption.js';
 import { createWebhookServer, startWebhookServer } from './webhook-server.js';
@@ -84,7 +84,7 @@ async function main(): Promise<void> {
   console.log('📧 Agent OTP Email Integration Service');
   console.log(`   Environment: ${config.NODE_ENV}`);
 
-  let gmailWatcher: GmailWatcher | null = null;
+  const gmailWatcher: GmailWatcher | null = null;
 
   // Initialize Gmail if configured
   if (config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET) {

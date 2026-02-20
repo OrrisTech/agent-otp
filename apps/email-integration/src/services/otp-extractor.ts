@@ -80,7 +80,7 @@ export function extractOTP(
 function calculateConfidence(
   content: string,
   code: string,
-  pattern: string
+  _pattern: string
 ): number {
   let confidence = 0.5; // Base confidence
 
